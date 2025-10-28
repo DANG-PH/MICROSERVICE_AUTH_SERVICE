@@ -11,7 +11,9 @@ import { Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from '@nestjs/cache-manager';
 import { otpEmailTemplate } from 'src/template/otp.template';
-
+import { securityAlertEmailTemplate } from 'src/template/otp.template';
+import { RpcException } from '@nestjs/microservices';
+import { status } from '@grpc/grpc-js';
 
 @Injectable()
 export class AuthService {
@@ -65,11 +67,24 @@ export class AuthService {
 
     async login(data: LoginRequest): Promise<LoginResponse> {
       const user = await this.findByUsername(data.username);
-      if (!user) throw new Error('User not found');
+      if (!user) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'User not found'});
+
+      const isLocked = await this.cacheManager.get(`LOCK:${data.username}`);
+      if (isLocked) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Account temporarily locked. Try again later.'});
 
       const passwordMatch = await bcrypt.compare(data.password, user.password);
-      if (!passwordMatch) throw new UnauthorizedException('Invalid password');
+      if (!passwordMatch) {
+        const attempts = await this.incrementLoginAttempt(data.username);
 
+        if (attempts > 5) {
+          await this.cacheManager.set(`LOCK:${user.username}`, true, 10 * 60 * 1000);
+          await this.sendSecurityAlertMail(user.email);
+          throw new RpcException({code: status.UNAUTHENTICATED , message: 'Sai mật khẩu quá nhiều. Tài khoản bị vô hiệu 10 phút'});
+        }
+
+        throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Sai mật khẩu, vui lòng thử lại'});
+      }
+      
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
       await this.cacheManager.set(`OTP:${user.username}`, otp, 5 * 60 * 1000);
@@ -89,13 +104,12 @@ export class AuthService {
     const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
     const user = await this.findByUsername(username);
 
-    if (!user)
-      throw new UnauthorizedException('User không tồn tại');
-
+    if (!user) throw new RpcException({ code: status.UNAUTHENTICATED, message: 'User not found'});
+    
     const otpInCache = await this.cacheManager.get<string>(`OTP:${username}`);
 
     if (!otpInCache || otpInCache !== data.otp) {
-      throw new UnauthorizedException('OTP sai hoặc hết hạn');
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'OTP sai hoặc hết hạn'});
     }
 
     // Xóa OTP sau khi sử dụng
@@ -130,12 +144,15 @@ export class AuthService {
       const savedToken = await this.cacheManager.get<string>(`REFRESH:${username}`);
 
       if (!savedToken || savedToken !== refreshToken) {
-        throw new UnauthorizedException('Refresh token invalid or expired');
+        throw new RpcException({
+          code: status.UNAUTHENTICATED,
+          message: 'Invalid refresh token'
+        });
       }
 
       const user = await this.findByUsername(username);
       if (!user || user.biBan) {
-        throw new UnauthorizedException('User not allowed');
+        throw new RpcException({ code: status.UNAUTHENTICATED, message: 'User not allowed' });
       }
 
       const newAccessToken = this.jwtService.sign(
@@ -156,7 +173,26 @@ export class AuthService {
 
       return { access_token: newAccessToken };
     } catch (error) {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new RpcException({
+          code: status.UNAUTHENTICATED,
+          message: 'Invalid refresh token'
+      });
     }
+  }
+
+  private async incrementLoginAttempt(username: string): Promise<number> {
+    const key = `LOGIN_FAIL:${username}`;
+    let attempts = (await this.cacheManager.get<number>(key)) || 0;
+    attempts++;
+    await this.cacheManager.set(key, attempts, 15 * 60 * 1000); 
+    return attempts;
+  }
+
+  private async sendSecurityAlertMail(email: string) {
+    await this.mailerService.sendMail({
+      to: email,
+      subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
+      html: securityAlertEmailTemplate({ realname: email }),
+    });
   }
 }

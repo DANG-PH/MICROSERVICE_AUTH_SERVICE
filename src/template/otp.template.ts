@@ -67,3 +67,70 @@ export function otpEmailTemplate(user: any, otp: string) {
         </div>
         `;
 }
+
+
+export function securityAlertEmailTemplate(user: any) {
+  return `
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+
+    <div style="
+      font-family: Arial, sans-serif;
+      background: #2d1b1b !important;
+      color: #fff1f2 !important;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 450px;
+      margin: auto;
+      border: 2px solid #fb7185 !important;
+    ">
+      <div style="text-align: center; margin-bottom: 12px;">
+        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+          alt="Security Alert"
+          style="
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 2px solid #fb7185;
+            box-shadow: 0 0 12px rgba(251, 113, 133, 0.4);
+          " />
+      </div>
+
+      <h2 style="text-align:center; margin-bottom: 12px; color: #fb7185 !important;">
+        CẢNH BÁO BẢO MẬT – NGỌC RỒNG ONLINE
+      </h2>
+
+      <p style="font-size:14px; line-height:1.5; color: #ffe4e6 !important;">
+        Xin chào <b>${user.realname}</b>,<br/>
+        Chúng tôi vừa phát hiện nhiều lần đăng nhập thất bại bất thường
+        vào tài khoản của bạn trong thời gian ngắn.
+      </p>
+
+      <div style="
+        background: #3f1d1d !important;
+        padding: 14px;
+        border-radius: 10px;
+        border: 1px solid #fb7185 !important;
+        margin: 18px 0;
+        text-align:center;
+        color:#fecdd3 !important;
+      ">
+        Tài khoản của bạn đã bị <b>khóa tạm thời 10 phút</b><br/>
+        để đảm bảo an toàn.
+      </div>
+
+      <p style="font-size:14px; color: #ffe4e6 !important;">
+        Nếu đây là bạn, vui lòng thử lại sau.<br/>
+        Nếu không phải bạn, hãy đổi mật khẩu ngay khi đăng nhập lại được.
+      </p>
+
+      <hr style="border: none; border-top: 1px solid #7f1d1d; margin: 20px 0;" />
+
+      <div style="text-align:center; font-size:12px; color:#fecdd3 !important;">
+        © Ngọc Rồng Online – 2025 <br/>
+        Nếu bạn cần hỗ trợ vui lòng liên hệ admin Hải Đăng.
+      </div>
+    </div>
+  `;
+}
