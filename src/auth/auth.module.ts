@@ -5,28 +5,37 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 
 @Module({
   imports: [
-    MailerModule.forRoot({
-      transport: {
-        host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
-        auth: {
-          user: process.env.MAIL_USER,
-          pass: process.env.MAIL_PASS,
+    MailerModule.forRootAsync({
+      useFactory: async (config: ConfigService) => ({
+        transport: {
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
+          auth: {
+            user: config.get<string>('MAIL_USER'),
+            pass: config.get<string>('MAIL_PASS'),
+          },
         },
-      },
-      defaults: {
-        from: `"Ngọc Rồng Online"`,
-      },
+        defaults: {
+          from: `"Ngọc Rồng Online"`,
+        },
+      }),
+      inject: [ConfigService],
     }),
+
     TypeOrmModule.forFeature([AuthEntity]),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'haidang2809',          
+
+    JwtModule.registerAsync({
+      useFactory: async (config: ConfigService) => ({
+        secret: config.get<string>('JWT_SECRET'),
+      }),
+      inject: [ConfigService],
     }),
-  ], 
+  ],
   providers: [AuthService],
   exports: [AuthService, JwtModule],
   controllers: [AuthController],

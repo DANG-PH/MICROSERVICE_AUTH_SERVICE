@@ -1,9 +1,6 @@
 import { Controller, InternalServerErrorException, ForbiddenException, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import * as bcrypt from 'bcrypt';
-import { firstValueFrom } from 'rxjs';
-import { AuthEntity } from './auth.entity';
 import type { LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse } from 'proto/auth.pb';
 import { AUTH_SERVICE_NAME } from 'proto/auth.pb';
 
