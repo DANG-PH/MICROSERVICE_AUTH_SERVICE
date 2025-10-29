@@ -69,7 +69,7 @@ export function otpEmailTemplate(user: any, otp: string) {
 }
 
 
-export function securityAlertEmailTemplate(user: any) {
+export function securityAlertEmailTemplate(realname: string) {
   return `
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
@@ -102,7 +102,7 @@ export function securityAlertEmailTemplate(user: any) {
       </h2>
 
       <p style="font-size:14px; line-height:1.5; color: #ffe4e6 !important;">
-        Xin chào <b>${user.realname}</b>,<br/>
+        Xin chào <b>${realname}</b>,<br/>
         Chúng tôi vừa phát hiện nhiều lần đăng nhập thất bại bất thường
         vào tài khoản của bạn trong thời gian ngắn.
       </p>
@@ -130,6 +130,144 @@ export function securityAlertEmailTemplate(user: any) {
       <div style="text-align:center; font-size:12px; color:#fecdd3 !important;">
         © Ngọc Rồng Online – 2025 <br/>
         Nếu bạn cần hỗ trợ vui lòng liên hệ admin Hải Đăng.
+      </div>
+    </div>
+  `;
+}
+
+// ===== RESET PASSWORD EMAIL TEMPLATE =====
+export function resetPasswordEmailTemplate(user: { realname: string }): string {
+  return `
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <div style="
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 450px;
+      margin: auto;
+      border: 2px solid #f97316;
+    ">
+      <div style="text-align:center; margin-bottom:12px;">
+        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+             alt="Ngọc Rồng Online Logo"
+             style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:2px solid #f97316;box-shadow:0 0 10px rgba(249,115,22,0.3);" />
+      </div>
+
+      <h2 style="text-align:center; margin-bottom:12px; color:#f97316;">MẬT KHẨU ĐÃ ĐƯỢC ĐẶT LẠI</h2>
+
+      <p style="font-size:14px; line-height:1.5;">
+        Xin chào ${user.realname},<br/>
+        Mật khẩu của bạn đã được đặt lại thành công.
+      </p>
+
+      <p style="font-size:14px;">
+        Nếu bạn không thực hiện yêu cầu này, vui lòng liên hệ ngay với admin để bảo vệ tài khoản.
+      </p>
+
+      <hr style="border:none; border-top:1px solid #334155; margin:20px 0;" />
+
+      <div style="text-align:center; font-size:12px; color:#94a3b8;">
+        © Ngọc Rồng Online – 2025
+      </div>
+    </div>
+  `;
+}
+
+// ===== CHANGE EMAIL CONFIRMATION EMAIL TEMPLATE =====
+export function changeEmailConfirmationTemplate(user: { realname: string }, newEmail: string): string {
+  return `
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <div style="
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 450px;
+      margin: auto;
+      border: 2px solid #38bdf8;
+    ">
+      <div style="text-align:center; margin-bottom:12px;">
+        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+             alt="Ngọc Rồng Online Logo"
+             style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:2px solid #38bdf8;box-shadow:0 0 10px rgba(56,189,248,0.3);" />
+      </div>
+
+      <h2 style="text-align:center; margin-bottom:12px; color:#38bdf8;">EMAIL ĐÃ ĐƯỢC CẬP NHẬT</h2>
+
+      <p style="font-size:14px; line-height:1.5;">
+        Xin chào ${user.realname},<br/>
+        Email của bạn đã được cập nhật thành <b>${newEmail}</b>.
+      </p>
+
+      <p style="font-size:14px;">
+        Nếu bạn không thực hiện yêu cầu này, vui lòng liên hệ admin ngay lập tức.
+      </p>
+
+      <hr style="border:none; border-top:1px solid #334155; margin:20px 0;" />
+
+      <div style="text-align:center; font-size:12px; color:#94a3b8;">
+        © Ngọc Rồng Online – 2025
+      </div>
+    </div>
+  `;
+}
+
+export function otpResetPassTemplate(realname: string, otp: string): string {
+  return `
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    <div style="
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 20px;
+      border-radius: 12px;
+      max-width: 450px;
+      margin: auto;
+      border: 2px solid #3c4447ff;
+    ">
+      <div style="text-align:center; margin-bottom:12px;">
+        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+             alt="Ngọc Rồng Online Logo"
+             style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:2px solid #38bdf8;box-shadow:0 0 10px rgba(56,189,248,0.3);" />
+      </div>
+
+      <h2 style="text-align:center; margin-bottom:12px; color:#38bdf8;">YÊU CẦU RESET MẬT KHẨU</h2>
+
+      <p style="font-size:14px; line-height:1.5;">
+        Xin chào ${realname},<br/>
+        Bạn vừa yêu cầu đặt lại mật khẩu. Vui lòng sử dụng mã OTP bên dưới để xác thực:
+      </p>
+
+      <div style="
+        margin: 20px auto;
+        padding: 12px 0;
+        background: #1e293b;
+        border-radius: 10px;
+        text-align:center;
+        border: 1px solid #38bdf8;
+      ">
+        <span style="
+          font-size: 28px;
+          font-weight: bold;
+          color: #38bdf8;
+          font-family: 'Courier New', monospace;
+        ">${otp}</span>
+      </div>
+
+      <p style="font-size:14px;">
+        Mã OTP có hiệu lực trong <b>5 phút</b>. Không chia sẻ mã với bất kỳ ai.
+      </p>
+
+      <hr style="border:none; border-top:1px solid #334155; margin:20px 0;" />
+
+      <div style="text-align:center; font-size:12px; color:#94a3b8;">
+        © Ngọc Rồng Online – 2025
       </div>
     </div>
   `;

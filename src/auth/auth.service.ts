@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type { LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, RefreshRequest, RefreshResponse, VerifyOtpRequest, VerifyOtpResponse } from 'proto/auth.pb';
+import type {RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -11,7 +11,7 @@ import { Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from '@nestjs/cache-manager';
 import { otpEmailTemplate } from 'src/template/otp.template';
-import { securityAlertEmailTemplate } from 'src/template/otp.template';
+import { securityAlertEmailTemplate, resetPasswordEmailTemplate, changeEmailConfirmationTemplate, otpResetPassTemplate } from 'src/template/otp.template';
 import { RpcException } from '@nestjs/microservices';
 import { status } from '@grpc/grpc-js';
 
@@ -78,7 +78,11 @@ export class AuthService {
 
         if (attempts > 5) {
           await this.cacheManager.set(`LOCK:${user.username}`, true, 10 * 60 * 1000);
-          await this.sendSecurityAlertMail(user.email);
+          await this.mailerService.sendMail({
+            to: user.email,
+            subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
+            html: securityAlertEmailTemplate(user.realname),
+          });
           throw new RpcException({code: status.UNAUTHENTICATED , message: 'Sai mật khẩu quá nhiều. Tài khoản bị vô hiệu 10 phút'});
         }
 
@@ -180,19 +184,116 @@ export class AuthService {
     }
   }
 
+  // ===== USER METHODS =====
+  async changePassword(data: ChangePasswordRequest): Promise<ChangePasswordResponse> {
+    const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
+    const user = await this.findByUsername(username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    const isMatch = await bcrypt.compare(data.oldPassword, user.password);
+    if (!isMatch) throw new RpcException({ code: status.UNAUTHENTICATED, message: 'Mật khẩu cũ không đúng' });
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(data.newPassword, salt);
+
+    await this.saveUser(user);
+    return { success: true };
+  }
+
+  async requestResetPassword(data: RequestResetPasswordRequest): Promise<RequestResetPasswordResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 số
+
+    await this.cacheManager.set(`RESET_OTP:${user.username}`, otp, 5 * 60 * 1000);
+
+    // Gửi mail OTP
+    await this.mailerService.sendMail({
+      to: user.email,
+      subject: 'OTP reset mật khẩu',
+      html: otpResetPassTemplate(user.realname, otp)
+    });
+
+    return { success: true };
+  }
+
+  async resetPassword(data: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    const otpInCache = await this.cacheManager.get<string>(`RESET_OTP:${user.username}`);
+    if (!otpInCache || otpInCache !== data.otp) {
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'OTP sai hoặc hết hạn' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const newPasswordHash = await bcrypt.hash(data.newPassword, salt);
+    user.password = newPasswordHash;
+
+    await this.saveUser(user);
+    await this.cacheManager.del(`RESET_OTP:${user.username}`);
+
+    await this.mailerService.sendMail({
+      to: user.email,
+      subject: 'Mật khẩu đã được đặt lại',
+      html: resetPasswordEmailTemplate(user),
+    });
+
+    return { success: true };
+  }
+
+  async changeEmail(data: ChangeEmailRequest): Promise<ChangeEmailResponse> {
+    const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
+    const user = await this.findByUsername(username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    user.email = data.newEmail;
+    await this.saveUser(user);
+
+    // Optional: send email xác nhận
+    await this.mailerService.sendMail({
+      to: user.email,
+      subject: 'Email đã được cập nhật',
+      html: changeEmailConfirmationTemplate(user, data.newEmail),
+    });
+    return { success: true };
+  }
+
+  // ===== ADMIN METHODS =====
+  async changeRole(data: ChangeRoleRequest): Promise<ChangeRoleResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    user.role = data.newRole;
+    await this.saveUser(user);
+    return { success: true };
+  }
+
+  async banUser(data: BanUserRequest): Promise<BanUserResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    user.biBan = true;
+    await this.saveUser(user);
+    return { success: true };
+  }
+
+  async unbanUser(data: UnbanUserRequest): Promise<UnbanUserResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    user.biBan = false;
+    await this.saveUser(user);
+    return { success: true };
+  }
+
+
   private async incrementLoginAttempt(username: string): Promise<number> {
     const key = `LOGIN_FAIL:${username}`;
     let attempts = (await this.cacheManager.get<number>(key)) || 0;
     attempts++;
     await this.cacheManager.set(key, attempts, 15 * 60 * 1000); 
     return attempts;
-  }
-
-  private async sendSecurityAlertMail(email: string) {
-    await this.mailerService.sendMail({
-      to: email,
-      subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
-      html: securityAlertEmailTemplate({ realname: email }),
-    });
   }
 }
