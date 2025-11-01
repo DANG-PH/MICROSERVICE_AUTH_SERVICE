@@ -33,6 +33,7 @@ message RegisterRequest {
 
 message RegisterResponse {
   bool success = 1;
+  int32 auth_id = 2;
 }
 
 message LoginRequest {
@@ -52,6 +53,7 @@ message VerifyOtpRequest {
 message VerifyOtpResponse {
   string access_token = 1;
   string refresh_token = 2;
+  int32 auth_id = 3;
 }
 
 message RefreshRequest {
@@ -60,6 +62,7 @@ message RefreshRequest {
 
 message RefreshResponse {
   string access_token = 1;
+  string refresh_token = 2;
 }
 
 // --- User methods ---

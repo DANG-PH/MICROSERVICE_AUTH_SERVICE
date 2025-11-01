@@ -44,7 +44,7 @@ export class AuthService {
 
   async register(data: RegisterRequest): Promise<RegisterResponse> {
     const exists = await this.existsByUsername(data.username);
-    if (exists) return { success: false };
+    if (exists)  throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Đã tồn tại User'});
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(data.password, salt);
@@ -59,10 +59,7 @@ export class AuthService {
 
     await this.saveUser(userMoi);
 
-    // gọi user-service tạo profile
-    // await this.userService.createProfile({ userId: userMoi.id, name: data.name, avatar: data.avatar });
-
-    return { success: true };
+    return { success: true, auth_id: userMoi.id };
   }
 
     async login(data: LoginRequest): Promise<LoginResponse> {
@@ -135,11 +132,12 @@ export class AuthService {
 
     return {
       access_token: accessToken,
-      refresh_token: refreshToken
+      refresh_token: refreshToken,
+      auth_id: user.id
     };
   }
 
-  async refresh(refreshToken: string): Promise<{ access_token: string }> {
+  async refresh(refreshToken: string): Promise<{ access_token: string, refresh_token: string }> {
     try {
       const decoded = this.jwtService.verify(refreshToken);
 
@@ -175,7 +173,10 @@ export class AuthService {
         7 * 24 * 60 * 60 * 1000
       );
 
-      return { access_token: newAccessToken };
+      return { 
+        access_token: newAccessToken,
+        refresh_token: newRefreshToken
+      };
     } catch (error) {
       throw new RpcException({
           code: status.UNAUTHENTICATED,
