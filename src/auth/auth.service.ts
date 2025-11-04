@@ -75,7 +75,7 @@ export class AuthService {
 
         if (attempts > 5) {
           await this.cacheManager.set(`LOCK:${user.username}`, true, 10 * 60 * 1000);
-          await this.mailerService.sendMail({
+          this.mailerService.sendMail({ // bỏ await để tránh user đợi lâu
             to: user.email,
             subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
             html: securityAlertEmailTemplate(user.realname),
@@ -90,7 +90,7 @@ export class AuthService {
 
       await this.cacheManager.set(`OTP:${user.username}`, otp, 5 * 60 * 1000);
 
-      await this.mailerService.sendMail({
+      this.mailerService.sendMail({
         to: user.email,
         subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
         html: otpEmailTemplate(user, otp),
@@ -210,7 +210,7 @@ export class AuthService {
     await this.cacheManager.set(`RESET_OTP:${user.username}`, otp, 5 * 60 * 1000);
 
     // Gửi mail OTP
-    await this.mailerService.sendMail({
+    this.mailerService.sendMail({
       to: user.email,
       subject: 'OTP reset mật khẩu',
       html: otpResetPassTemplate(user.realname, otp)
@@ -235,7 +235,7 @@ export class AuthService {
     await this.saveUser(user);
     await this.cacheManager.del(`RESET_OTP:${user.username}`);
 
-    await this.mailerService.sendMail({
+    this.mailerService.sendMail({
       to: user.email,
       subject: 'Mật khẩu đã được đặt lại',
       html: resetPasswordEmailTemplate(user),
@@ -253,7 +253,7 @@ export class AuthService {
     await this.saveUser(user);
 
     // Optional: send email xác nhận
-    await this.mailerService.sendMail({
+    this.mailerService.sendMail({
       to: user.email,
       subject: 'Email đã được cập nhật',
       html: changeEmailConfirmationTemplate(user, data.newEmail),
