@@ -21,7 +21,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
           },
         },
         defaults: {
-          from: `"Ngọc Rồng Online"`,
+          from: `"HDG Studio" <${config.get<string>('MAIL_USER')}>`,
         },
       }),
       inject: [ConfigService],
