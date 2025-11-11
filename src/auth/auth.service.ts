@@ -158,7 +158,7 @@ export class AuthService {
       }
 
       const newAccessToken = this.jwtService.sign(
-        { username: username },
+        { username: username, role: user.role },
         { expiresIn: '15m' }
       );
 
