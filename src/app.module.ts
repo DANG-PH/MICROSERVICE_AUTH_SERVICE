@@ -5,6 +5,7 @@ import { AuthModule } from './auth/auth.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from './redis/redis.module';
+import { PayModule } from './pay/pay.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RedisModule } from './redis/redis.module';
     }),
     AuthModule,
     RedisModule,
+    PayModule,
   ],
   controllers: [AppController],
   providers: [AppService],

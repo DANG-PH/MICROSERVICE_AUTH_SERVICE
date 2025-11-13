@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse } from 'proto/auth.pb';
+import type {ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -14,6 +14,8 @@ import { otpEmailTemplate } from 'src/template/otp.template';
 import { securityAlertEmailTemplate, resetPasswordEmailTemplate, changeEmailConfirmationTemplate, otpResetPassTemplate } from 'src/template/otp.template';
 import { RpcException } from '@nestjs/microservices';
 import { status } from '@grpc/grpc-js';
+import { ClientProxy } from '@nestjs/microservices';
+import { PayService } from 'src/pay/pay.service';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +25,8 @@ export class AuthService {
     private jwtService: JwtService,
     private mailerService: MailerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    // @Inject('EMAIL_SERVICE') private readonly emailClient: ClientProxy
+    private readonly payService: PayService,
   ) {}
 
   async saveUser(user: AuthEntity): Promise<AuthEntity> {
@@ -75,7 +79,12 @@ export class AuthService {
 
         if (attempts > 5) {
           await this.cacheManager.set(`LOCK:${user.username}`, true, 10 * 60 * 1000);
-          this.mailerService.sendMail({ // bỏ await để tránh user đợi lâu
+          // this.emailClient.emit('send_email', {
+          //   to: user.email,
+          //   subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
+          //   html: securityAlertEmailTemplate(user.realname),
+          // }); // cách dùng rabbitMQ
+          this.mailerService.sendMail({ // bỏ await để tránh user đợi lâu, cách thường
             to: user.email,
             subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
             html: securityAlertEmailTemplate(user.realname),
@@ -89,6 +98,13 @@ export class AuthService {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
       await this.cacheManager.set(`OTP:${user.username}`, otp, 5 * 60 * 1000);
+
+      // thay vì gửi mail luôn thì mình dùng rabbitMQ để xử lí bất đồng bộ
+      // this.emailClient.emit('send_email', {
+      //   to: user.email,
+      //   subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
+      //   html: otpEmailTemplate(user, otp),
+      // });
 
       this.mailerService.sendMail({
         to: user.email,
@@ -116,9 +132,9 @@ export class AuthService {
     // Xóa OTP sau khi sử dụng
     await this.cacheManager.del(`OTP:${username}`);
 
-    const payload = { username: user.username, role: user.role };
+    const payload = { userId: user.id, username: user.username, role: user.role };
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '1d' }); // tamj thoi de 1d thay 15m
     const refreshToken = this.jwtService.sign(
       { username: user.username },
       { expiresIn: '7d' }
@@ -158,8 +174,8 @@ export class AuthService {
       }
 
       const newAccessToken = this.jwtService.sign(
-        { username: username, role: user.role },
-        { expiresIn: '15m' }
+        { userId: user.id, username: username, role: user.role },
+        { expiresIn: '1d' }
       );
 
       const newRefreshToken = this.jwtService.sign(
@@ -210,6 +226,13 @@ export class AuthService {
     await this.cacheManager.set(`RESET_OTP:${user.username}`, otp, 5 * 60 * 1000);
 
     // Gửi mail OTP
+
+    // this.emailClient.emit('send_email', {
+    //   to: user.email,
+    //   subject: 'OTP reset mật khẩu',
+    //   html: otpResetPassTemplate(user.realname, otp)
+    // });
+    
     this.mailerService.sendMail({
       to: user.email,
       subject: 'OTP reset mật khẩu',
@@ -235,6 +258,12 @@ export class AuthService {
     await this.saveUser(user);
     await this.cacheManager.del(`RESET_OTP:${user.username}`);
 
+    // this.emailClient.emit('send_email', {
+    //   to: user.email,
+    //   subject: 'Mật khẩu đã được đặt lại',
+    //   html: resetPasswordEmailTemplate(user),
+    // });
+
     this.mailerService.sendMail({
       to: user.email,
       subject: 'Mật khẩu đã được đặt lại',
@@ -253,6 +282,13 @@ export class AuthService {
     await this.saveUser(user);
 
     // Optional: send email xác nhận
+
+    // this.emailClient.emit('send_email', {
+    //   to: user.email,
+    //   subject: 'Email đã được cập nhật',
+    //   html: changeEmailConfirmationTemplate(user, data.newEmail),
+    // });
+
     this.mailerService.sendMail({
       to: user.email,
       subject: 'Email đã được cập nhật',
@@ -286,6 +322,25 @@ export class AuthService {
 
     user.biBan = false;
     await this.saveUser(user);
+    return { success: true };
+  }
+
+  async changeRolePartner(data: ChangeRolePartnerRequest): Promise<ChangeRolePartnerResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    const payResp = await this.payService.getPay({userId: user.id});
+    const userBalance = Number(payResp.pay?.tien) || 0;
+
+    if (50000 > userBalance) {
+      throw new RpcException({ status: status.FAILED_PRECONDITION, message: 'Số dư không đủ để nâng role Partner' });
+    }
+    
+    if (user.role !== "USER") throw new RpcException({ status: status.ALREADY_EXISTS, message: 'Bạn đã có role đặc biệt' });
+    user.role = "PARTNER"
+    await this.userRepository.save(user);
+  
+    await this.payService.updateMoney({userId: user.id, amount: -50000})
     return { success: true };
   }
 

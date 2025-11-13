@@ -6,9 +6,26 @@ import { AuthController } from './auth.controller';
 import { JwtModule } from '@nestjs/jwt';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import { PayModule } from 'src/pay/pay.module';
 
 @Module({
   imports: [
+
+    // Đăng kí client RabbitMQ
+    // ClientsModule.register([
+    //   {
+    //     name: 'EMAIL_SERVICE',
+    //     transport: Transport.RMQ,
+    //     options: {
+    //       urls: ['amqp://guest:guest@localhost:5672'],
+    //       queue: 'email_queue',
+    //       queueOptions: { durable: true },
+    //     },
+    //   },
+    // ]),
+
+    // Tạm thời gửi mail luôn, k dùng RabbitMQ
     MailerModule.forRootAsync({
       useFactory: async (config: ConfigService) => ({
         transport: {
@@ -35,6 +52,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
       }),
       inject: [ConfigService],
     }),
+    PayModule
   ],
   providers: [AuthService],
   exports: [AuthService, JwtModule],
