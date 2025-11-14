@@ -16,6 +16,8 @@ import { RpcException } from '@nestjs/microservices';
 import { status } from '@grpc/grpc-js';
 import { ClientProxy } from '@nestjs/microservices';
 import { PayService } from 'src/pay/pay.service';
+import * as crypto from 'crypto';
+import { ref } from 'process';
 
 @Injectable()
 export class AuthService {
@@ -161,7 +163,7 @@ export class AuthService {
 
       const savedToken = await this.cacheManager.get<string>(`REFRESH:${username}`);
 
-      if (!savedToken || savedToken !== refreshToken) {
+      if (!savedToken || savedToken !== crypto.createHash('sha256').update(refreshToken).digest('hex')) {
         throw new RpcException({
           code: status.UNAUTHENTICATED,
           message: 'Invalid refresh token'
@@ -183,10 +185,18 @@ export class AuthService {
         { expiresIn: '7d' }
       );
 
+      const hashed = crypto.createHash('sha256')
+                           .update(newRefreshToken)
+                           .digest('hex'); // nếu bỏ digest thì hashed là giá trị binary khó đọc, có thể dùng hex hoặc base64
+
+      const ttl = await this.cacheManager.ttl(`REFRESH:${username}`);
+
+      const timeConLaiTokenCu = (ttl || Date.now() + 7 * 24 * 60 * 60 * 1000) - Date.now();
+
       await this.cacheManager.set(
         `REFRESH:${username}`,
-        newRefreshToken,
-        7 * 24 * 60 * 60 * 1000
+        hashed,
+        timeConLaiTokenCu // 7 * 24 * 60 * 60 * 1000 (Nếu muốn login vô hạn)
       );
 
       return { 
