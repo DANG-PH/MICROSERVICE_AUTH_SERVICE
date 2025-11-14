@@ -15,6 +15,7 @@ service AuthService {
   rpc RequestResetPassword (RequestResetPasswordRequest) returns (RequestResetPasswordResponse) {};
   rpc ChangeEmail (ChangeEmailRequest) returns (ChangeEmailResponse) {};
   rpc ChangeRolePartner (ChangeRolePartnerRequest) returns (ChangeRolePartnerResponse) {};
+  rpc GetEmailUser (GetEmailUserRequest) returns (GetEmailUserResponse) {};
 
   // admin actions
   rpc ChangeRole (ChangeRoleRequest) returns (ChangeRoleResponse) {};
@@ -137,4 +138,12 @@ message ChangeRolePartnerRequest {
 
 message ChangeRolePartnerResponse {
   bool success = 1;
+}
+
+message GetEmailUserRequest {
+  int32 id = 1;
+}
+
+message GetEmailUserResponse {
+  string email = 1;
 }

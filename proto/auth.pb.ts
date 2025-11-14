@@ -127,6 +127,14 @@ export interface ChangeRolePartnerResponse {
   success: boolean;
 }
 
+export interface GetEmailUserRequest {
+  id: number;
+}
+
+export interface GetEmailUserResponse {
+  email: string;
+}
+
 export const AUTH_PACKAGE_NAME = "auth";
 
 /** ===== SERVICE DEFINITION ===== */
@@ -154,6 +162,8 @@ export interface AuthServiceClient {
   changeEmail(request: ChangeEmailRequest, metadata?: Metadata): Observable<ChangeEmailResponse>;
 
   changeRolePartner(request: ChangeRolePartnerRequest, metadata?: Metadata): Observable<ChangeRolePartnerResponse>;
+
+  getEmailUser(request: GetEmailUserRequest, metadata?: Metadata): Observable<GetEmailUserResponse>;
 
   /** admin actions */
 
@@ -190,6 +200,8 @@ export interface AuthServiceController {
 
   changeRolePartner(request: ChangeRolePartnerRequest, metadata?: Metadata): Observable<ChangeRolePartnerResponse>;
 
+  getEmailUser(request: GetEmailUserRequest, metadata?: Metadata): Observable<GetEmailUserResponse>;
+
   /** admin actions */
 
   changeRole(request: ChangeRoleRequest, metadata?: Metadata): Observable<ChangeRoleResponse>;
@@ -211,6 +223,7 @@ export function AuthServiceControllerMethods() {
       "requestResetPassword",
       "changeEmail",
       "changeRolePartner",
+      "getEmailUser",
       "changeRole",
       "banUser",
       "unbanUser",
