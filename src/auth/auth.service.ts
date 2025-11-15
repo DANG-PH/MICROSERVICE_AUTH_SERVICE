@@ -68,56 +68,73 @@ export class AuthService {
     return { success: true, auth_id: userMoi.id };
   }
 
-    async login(data: LoginRequest): Promise<LoginResponse> {
-      const user = await this.findByUsername(data.username);
-      if (!user) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'User not found'});
+  async login(data: LoginRequest): Promise<LoginResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'User not found'});
 
-      const isLocked = await this.cacheManager.get(`LOCK:${data.username}`);
-      if (isLocked) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Account temporarily locked. Try again later.'});
+    const isLocked = await this.cacheManager.get(`LOCK:${data.username}`);
+    if (isLocked) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Account temporarily locked. Try again later.'});
 
-      const passwordMatch = await bcrypt.compare(data.password, user.password);
-      if (!passwordMatch) {
-        const attempts = await this.incrementLoginAttempt(data.username);
+    const passwordMatch = await bcrypt.compare(data.password, user.password);
+    if (!passwordMatch) {
+      const attempts = await this.incrementLoginAttempt(data.username);
 
-        if (attempts > 5) {
-          await this.cacheManager.set(`LOCK:${user.username}`, true, 10 * 60 * 1000);
-          // this.emailClient.emit('send_email', {
-          //   to: user.email,
-          //   subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
-          //   html: securityAlertEmailTemplate(user.realname),
-          // }); // cách dùng rabbitMQ
-          this.mailerService.sendMail({ // bỏ await để tránh user đợi lâu, cách thường
-            to: user.email,
-            subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
-            html: securityAlertEmailTemplate(user.realname),
-          });
-          throw new RpcException({code: status.UNAUTHENTICATED , message: 'Sai mật khẩu quá nhiều. Tài khoản bị vô hiệu 10 phút'});
-        }
-
-        throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Sai mật khẩu, vui lòng thử lại'});
+      if (attempts > 5) {
+        await this.cacheManager.set(`LOCK:${user.username}`, true, 10 * 60 * 1000);
+        // this.emailClient.emit('send_email', {
+        //   to: user.email,
+        //   subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
+        //   html: securityAlertEmailTemplate(user.realname),
+        // }); // cách dùng rabbitMQ
+        this.mailerService.sendMail({ // bỏ await để tránh user đợi lâu, cách thường
+          to: user.email,
+          subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
+          html: securityAlertEmailTemplate(user.realname),
+        });
+        throw new RpcException({code: status.UNAUTHENTICATED , message: 'Sai mật khẩu quá nhiều. Tài khoản bị vô hiệu 10 phút'});
       }
-      
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      await this.cacheManager.set(`OTP:${user.username}`, otp, 5 * 60 * 1000);
-
-      // thay vì gửi mail luôn thì mình dùng rabbitMQ để xử lí bất đồng bộ
-      // this.emailClient.emit('send_email', {
-      //   to: user.email,
-      //   subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
-      //   html: otpEmailTemplate(user, otp),
-      // });
-
-      this.mailerService.sendMail({
-        to: user.email,
-        subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
-        html: otpEmailTemplate(user, otp),
-      });
-
-
-      const sessionId = Buffer.from(user.username).toString('base64');
-      return { sessionId };
+      throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Sai mật khẩu, vui lòng thử lại'});
     }
+
+    if (user.biBan) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin'});
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    await this.cacheManager.set(`OTP:${user.username}`, otp, 5 * 60 * 1000);
+
+    // thay vì gửi mail luôn thì mình dùng rabbitMQ để xử lí bất đồng bộ
+    // this.emailClient.emit('send_email', {
+    //   to: user.email,
+    //   subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
+    //   html: otpEmailTemplate(user, otp),
+    // });
+
+    this.mailerService.sendMail({
+      to: user.email,
+      subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
+      html: otpEmailTemplate(user, otp),
+    });
+
+
+    const sessionId = Buffer.from(user.username).toString('base64');
+    return { sessionId };
+  }
+
+  async checkAccount(data: LoginRequest): Promise<LoginResponse> {
+    const user = await this.findByUsername(data.username);
+    if (!user) throw new RpcException({code: status.NOT_FOUND ,message: 'Tài khoản không tồn tại trong hệ thống'});
+
+    if (user.biBan) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đã bị khóa, không thể đăng bán'});
+
+    const passwordMatch = await bcrypt.compare(data.password, user.password);
+    if (!passwordMatch) {
+      throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Sai mật khẩu, vui lòng thử lại'});
+    }
+    
+    const sessionId = Buffer.from(user.username).toString('base64');
+    return { sessionId };
+  }
 
   async verifyOtp(data : VerifyOtpRequest): Promise<VerifyOtpResponse> {
     const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
@@ -320,6 +337,7 @@ export class AuthService {
   async banUser(data: BanUserRequest): Promise<BanUserResponse> {
     const user = await this.findByUsername(data.username);
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+    if (user.role == "ADMIN") throw new RpcException({ code: status.PERMISSION_DENIED, message: 'ADMIN không thể bị ban' })
 
     user.biBan = true;
     await this.saveUser(user);
@@ -329,6 +347,7 @@ export class AuthService {
   async unbanUser(data: UnbanUserRequest): Promise<UnbanUserResponse> {
     const user = await this.findByUsername(data.username);
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+    if (user.role == "ADMIN") throw new RpcException({ code: status.PERMISSION_DENIED, message: 'User trên là ADMIN' })
 
     user.biBan = false;
     await this.saveUser(user);
