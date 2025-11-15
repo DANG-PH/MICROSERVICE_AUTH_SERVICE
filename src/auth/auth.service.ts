@@ -168,7 +168,8 @@ export class AuthService {
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
-      auth_id: user.id
+      auth_id: user.id,
+      role: user.role
     };
   }
 
