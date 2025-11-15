@@ -77,4 +77,9 @@ export class AuthController {
   async getEmailUser(data: GetEmailUserRequest): Promise<GetEmailUserResponse> {
     return await this.authService.getEmailUser(data);
   }
+
+  @GrpcMethod(AUTH_SERVICE_NAME, 'CheckAccount')
+  async checkAccount(data: LoginRequest): Promise<LoginResponse> {
+    return await this.authService.checkAccount(data);
+  }
 }
