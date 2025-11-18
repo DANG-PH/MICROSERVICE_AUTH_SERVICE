@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -11,7 +11,7 @@ import { Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from '@nestjs/cache-manager';
 import { otpEmailTemplate } from 'src/template/otp.template';
-import { securityAlertEmailTemplate, resetPasswordEmailTemplate, changeEmailConfirmationTemplate, otpResetPassTemplate } from 'src/template/otp.template';
+import { ManagerEmailTemplate, securityAlertEmailTemplate, resetPasswordEmailTemplate, changeEmailConfirmationTemplate, otpResetPassTemplate } from 'src/template/otp.template';
 import { RpcException } from '@nestjs/microservices';
 import { status } from '@grpc/grpc-js';
 import { ClientProxy } from '@nestjs/microservices';
@@ -27,7 +27,7 @@ export class AuthService {
     private jwtService: JwtService,
     private mailerService: MailerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    // @Inject('EMAIL_SERVICE') private readonly emailClient: ClientProxy
+    @Inject('EMAIL_SERVICE') private readonly emailClient: ClientProxy,
     private readonly payService: PayService,
   ) {}
 
@@ -389,6 +389,23 @@ export class AuthService {
       biBan: user.biBan,
       role: user.role
     };
+  }
+
+  async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
+    const html = ManagerEmailTemplate(data.title, data.content);
+
+    if (data.who.toUpperCase() === "ALL") {
+      const emails = Array.from(new Set((await this.userRepository.find({ select: ['email'] })).map(e => e.email)));
+
+      this.emailClient.emit('send_emails', { emails, subject: data.title, html });
+    } else {
+      const user = await this.findByUsername(data.who);
+      if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+      this.emailClient.emit('send_email', { to: user.email, subject: data.title, html });
+    }
+
+    return { success: true };
   }
 
 

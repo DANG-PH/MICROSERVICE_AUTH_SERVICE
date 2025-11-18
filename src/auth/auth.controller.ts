@@ -1,7 +1,7 @@
 import { Controller, InternalServerErrorException, ForbiddenException, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import type { GetProfileReponse, GetProfileRequest, GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse,RequestResetPasswordRequest, RequestResetPasswordResponse } from 'proto/auth.pb';
+import type { GetProfileReponse, GetProfileRequest, GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse,RequestResetPasswordRequest, RequestResetPasswordResponse, SendEmailToUserRequest, SendemailToUserResponse } from 'proto/auth.pb';
 import { AUTH_SERVICE_NAME } from 'proto/auth.pb';
 
 @Controller()
@@ -88,5 +88,10 @@ export class AuthController {
   @GrpcMethod(AUTH_SERVICE_NAME, 'CheckAccount')
   async checkAccount(data: LoginRequest): Promise<LoginResponse> {
     return await this.authService.checkAccount(data);
+  }
+
+  @GrpcMethod(AUTH_SERVICE_NAME, 'SendEmailToUser')
+  async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
+    return await this.authService.sendEmailToUser(data);
   }
 }

@@ -272,3 +272,58 @@ export function otpResetPassTemplate(realname: string, otp: string): string {
     </div>
   `;
 }
+
+// Template do player manager gửi
+export function ManagerEmailTemplate(
+  title: string,
+  content: string,
+  realname?: string,
+) {
+  const displayName = realname || "Chiến Binh";
+
+  return `
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
+    
+    <div style="
+      font-family: Arial, sans-serif;
+      background: #111827 !important;
+      color: #e0e7ff !important;
+      padding: 24px;
+      border-radius: 14px;
+      max-width: 500px;
+      margin: auto;
+      border: 2px solid #6366f1 !important;
+      box-shadow: 0 0 14px rgba(99,102,241,0.4);
+    ">
+      <div style="text-align: center; margin-bottom: 16px;">
+        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+          alt="Notification"
+          style="
+            width: 110px;
+            height: 110px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 2px solid #6366f1;
+          "
+        />
+      </div>
+
+      <h2 style="text-align:center; margin-bottom: 14px; color: #818cf8 !important;">
+        ${title.toUpperCase()}
+      </h2>
+
+      <p style="font-size:14px; line-height:1.6; color: #c7d2fe !important;">
+        Xin chào <b>${displayName}</b>,<br/>
+        ${content}
+      </p>
+
+      <hr style="border:none; border-top:1px solid #374151; margin: 20px 0;" />
+
+      <div style="text-align:center; font-size:12px; color:#9ca3af !important;">
+        © Ngọc Rồng Online – 2025 <br/>
+        Nếu bạn cần hỗ trợ vui lòng liên hệ admin Hải Đăng.
+      </div>
+    </div>
+  `;
+}
