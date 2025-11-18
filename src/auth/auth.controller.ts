@@ -90,8 +90,8 @@ export class AuthController {
     return await this.authService.checkAccount(data);
   }
 
-  @GrpcMethod(AUTH_SERVICE_NAME, 'SendEmailToUser')
-  async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
-    return await this.authService.sendEmailToUser(data);
-  }
+  // @GrpcMethod(AUTH_SERVICE_NAME, 'SendEmailToUser')
+  // async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
+  //   return await this.authService.sendEmailToUser(data);
+  // }
 }
