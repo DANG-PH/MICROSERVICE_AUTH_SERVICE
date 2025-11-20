@@ -27,7 +27,7 @@ export class AuthService {
     private jwtService: JwtService,
     private mailerService: MailerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    // @Inject('EMAIL_SERVICE') private readonly emailClient: ClientProxy,
+    @Inject('EMAIL_SERVICE') private readonly emailClient: ClientProxy,
     private readonly payService: PayService,
   ) {}
 
@@ -391,22 +391,22 @@ export class AuthService {
     };
   }
 
-  // async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
-  //   const html = ManagerEmailTemplate(data.title, data.content);
+  async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
+    const html = ManagerEmailTemplate(data.title, data.content);
 
-  //   if (data.who.toUpperCase() === "ALL") {
-  //     const emails = Array.from(new Set((await this.userRepository.find({ select: ['email'] })).map(e => e.email)));
+    if (data.who.toUpperCase() === "ALL") {
+      const emails = Array.from(new Set((await this.userRepository.find({ select: ['email'] })).map(e => e.email)));
 
-  //     this.emailClient.emit('send_emails', { emails, subject: data.title, html });
-  //   } else {
-  //     const user = await this.findByUsername(data.who);
-  //     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+      this.emailClient.emit('send_emails', { emails, subject: data.title, html });
+    } else {
+      const user = await this.findByUsername(data.who);
+      if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
 
-  //     this.emailClient.emit('send_email', { to: user.email, subject: data.title, html });
-  //   }
+      this.emailClient.emit('send_email', { to: user.email, subject: data.title, html });
+    }
 
-  //   return { success: true };
-  // }
+    return { success: true };
+  }
 
 
   private async incrementLoginAttempt(username: string): Promise<number> {

@@ -13,17 +13,17 @@ import { PayModule } from 'src/pay/pay.module';
   imports: [
 
     // Đăng kí client RabbitMQ
-    // ClientsModule.register([
-    //   {
-    //     name: 'EMAIL_SERVICE',
-    //     transport: Transport.RMQ,
-    //     options: {
-    //       urls: ['amqp://guest:guest@localhost:5672'],
-    //       queue: 'email_queue',
-    //       queueOptions: { durable: true },
-    //     },
-    //   },
-    // ]),
+    ClientsModule.register([
+      {
+        name: 'EMAIL_SERVICE',
+        transport: Transport.RMQ,
+        options: {
+          urls: ['amqp://guest:guest@localhost:5672'],
+          queue: 'email_queue',
+          queueOptions: { durable: true },
+        },
+      },
+    ]),
 
     MailerModule.forRootAsync({
       useFactory: async (config: ConfigService) => ({
