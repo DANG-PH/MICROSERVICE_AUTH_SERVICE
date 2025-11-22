@@ -279,7 +279,45 @@ export function ManagerEmailTemplate(
   content: string,
   realname?: string,
 ) {
+  console.log(realname)
   const displayName = realname || "Chiến Binh";
+
+  // Danh sách màu "an toàn" (ngoại trừ đỏ)
+  const colors = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6"];
+  
+  // Danh sách ảnh
+  // const images = [
+  //   "https://i.postimg.cc/vHgpK4JX/avt9.webp",
+  //   "https://i.pinimg.com/originals/dd/df/75/dddf75ab05410bad848609bf84f7635b.jpg",
+  // ];
+
+  let color = colors[Math.floor(Math.random() * colors.length)];
+  // let image = images[Math.floor(Math.random() * images.length)];
+
+  let image = '';
+
+  // Nếu title là cảnh báo -> bắt buộc đỏ và ảnh cảnh báo
+  if (title.toLowerCase().includes("cảnh báo") || title.toLowerCase().includes("ban") || title.toLowerCase().includes("bảo mật")) {
+    color = "#ef4444"; // đỏ
+    image = "https://avatarfiles.alphacoders.com/857/85715.png";
+  }
+
+  // Nếu màu là xanh lá -> bắt buộc ảnh Broly
+  if (color === "#10b981") {
+    image = "https://avatars.pfptown.com/775/broly-pfp-2999.png";
+  }
+
+  if (color === "#f59e0b") {
+    image = "https://i.redd.it/tnpjnvyab2z31.png";
+  }
+
+  if (color === "#8b5cf6") {
+    image = "https://pfptown.com/download/pfptown/1690212148/goku-black-pfp-2408.png";
+  }
+
+  if (color === "#3b82f6") {
+    image = "https://i.postimg.cc/vHgpK4JX/avt9.webp";
+  }
 
   return `
     <meta name="color-scheme" content="light dark">
@@ -293,23 +331,23 @@ export function ManagerEmailTemplate(
       border-radius: 14px;
       max-width: 500px;
       margin: auto;
-      border: 2px solid #6366f1 !important;
-      box-shadow: 0 0 14px rgba(99,102,241,0.4);
+      border: 2px solid ${color} !important;
+      box-shadow: 0 0 14px ${color}66;
     ">
       <div style="text-align: center; margin-bottom: 16px;">
-        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+        <img src="${image}"
           alt="Notification"
           style="
             width: 110px;
             height: 110px;
             object-fit: cover;
             border-radius: 50%;
-            border: 2px solid #6366f1;
+            border: 2px solid ${color};
           "
         />
       </div>
 
-      <h2 style="text-align:center; margin-bottom: 14px; color: #818cf8 !important;">
+      <h2 style="text-align:center; margin-bottom: 14px; color: ${color} !important;">
         ${title.toUpperCase()}
       </h2>
 

@@ -1,3 +1,6 @@
+import * as dotenv from 'dotenv';
+dotenv.config();
+
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
@@ -15,7 +18,7 @@ async function bootstrap() {
     options: {
       package: AUTH_PACKAGE_NAME,
       protoPath: join(process.cwd(), 'proto/auth.proto'), 
-      url: 'localhost:50051', 
+      url: process.env.AUTH_URL, 
       loader: {
         keepCase: true,
         objects: true,
@@ -25,10 +28,10 @@ async function bootstrap() {
   });
 
   await app.startAllMicroservices();
-  logger.log('✅ gRPC server running on localhost:50051');
+  logger.log(`✅ gRPC server running on ${process.env.AUTH_URL}`);
 
-  await app.listen(process.env.PORT ?? 3001);
-  logger.log(`✅ HTTP server running on ${process.env.PORT ?? 3001}`);
+  await app.listen(Number(process.env.PORT));
+  logger.log(`✅ HTTP server running on ${process.env.PORT}`);
 }
 
 bootstrap();

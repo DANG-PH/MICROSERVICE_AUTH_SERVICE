@@ -23,6 +23,7 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.14.0",
     "@grpc/proto-loader": "^0.8.0",
+    "@keyv/redis": "^5.1.4",
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/common": "^11.0.1",
@@ -39,6 +40,7 @@
     "bcrypt": "^6.0.0",
     "cache-manager": "^7.2.4",
     "cache-manager-ioredis-yet": "^2.1.2",
+    "cacheable": "^2.2.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "google-auth-library": "^10.5.0",

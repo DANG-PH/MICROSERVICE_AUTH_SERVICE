@@ -27,7 +27,7 @@ export class AuthService {
     private jwtService: JwtService,
     private mailerService: MailerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    @Inject('EMAIL_SERVICE') private readonly emailClient: ClientProxy,
+    @Inject(String(process.env.RABBIT_SERVICE)) private readonly emailClient: ClientProxy,
     private readonly payService: PayService,
   ) {}
 
@@ -392,9 +392,9 @@ export class AuthService {
   }
 
   async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
-    const html = ManagerEmailTemplate(data.title, data.content);
 
     if (data.who.toUpperCase() === "ALL") {
+      const html = ManagerEmailTemplate(data.title, data.content);
       const emails = Array.from(new Set((await this.userRepository.find({ select: ['email'] })).map(e => e.email)));
 
       this.emailClient.emit('send_emails', { emails, subject: data.title, html });
@@ -402,6 +402,7 @@ export class AuthService {
       const user = await this.findByUsername(data.who);
       if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
 
+      const html = ManagerEmailTemplate(data.title, data.content, user.realname);
       this.emailClient.emit('send_email', { to: user.email, subject: data.title, html });
     }
 

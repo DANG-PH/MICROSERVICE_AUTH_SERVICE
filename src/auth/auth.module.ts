@@ -15,11 +15,11 @@ import { PayModule } from 'src/pay/pay.module';
     // Đăng kí client RabbitMQ
     ClientsModule.register([
       {
-        name: 'EMAIL_SERVICE',
+        name: String(process.env.RABBIT_SERVICE),
         transport: Transport.RMQ,
         options: {
-          urls: ['amqp://guest:guest@localhost:5672'],
-          queue: 'email_queue',
+          urls: [String(process.env.RABBIT_URL)],
+          queue: process.env.RABBIT_QUEUE,
           queueOptions: { durable: true },
         },
       },
