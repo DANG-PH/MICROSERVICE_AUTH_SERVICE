@@ -72,8 +72,30 @@ export class AuthService {
     const user = await this.findByUsername(data.username);
     if (!user) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'User not found'});
 
+    const isOnline = await this.cacheManager.get(`online:${data.username}`);
+    if (isOnline) { 
+      const lastMailTime = await this.cacheManager.get<number>(`MAIL_SENT_ONLINE:${user.username}`);
+      const now = Date.now();
+
+      if (!lastMailTime || now - lastMailTime > 5 * 60 * 1000) { // 5 phút
+        const html = ManagerEmailTemplate(
+          "CẢNH BÁO BẢO MẬT",
+          "Hệ thống vừa phát hiện một nỗ lực đăng nhập đáng ngờ từ thiết bị hoặc địa điểm lạ vào tài khoản của bạn. Để bảo vệ tài khoản, vui lòng reset mật khẩu ngay lập tức. Nếu không phải bạn thực hiện, hãy liên hệ với bộ phận hỗ trợ để được trợ giúp và tránh rủi ro mất quyền truy cập. An toàn của bạn là ưu tiên hàng đầu!",
+          user.realname
+        );
+        this.mailerService.sendMail({
+          to: user.email,
+          subject: "CẢNH BÁO BẢO MẬT",
+          html
+        });
+
+        await this.cacheManager.set(`MAIL_SENT_ONLINE:${user.username}`, now, 5 * 60 * 1000); // lưu trong 5 phút
+      }
+      throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đang online, nếu không phải bạn vui lòng yêu cầu reset mật khẩu.'});
+    };
+
     const isLocked = await this.cacheManager.get(`LOCK:${data.username}`);
-    if (isLocked) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Account temporarily locked. Try again later.'});
+    if (isLocked) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản bị vô hiệu 10 phút do sai thông tin đăng nhập quá nhiều.'});
 
     const passwordMatch = await bcrypt.compare(data.password, user.password);
     if (!passwordMatch) {
@@ -159,9 +181,20 @@ export class AuthService {
       { expiresIn: '7d' }
     );
 
+    const hashed = crypto.createHash('sha256')
+                      .update(refreshToken)
+                      .digest('hex'); // nếu bỏ digest thì hashed là giá trị binary khó đọc, có thể dùng hex hoặc base64
+
+
+    await this.cacheManager.set(
+      `ACCESS:${user.username}`,
+      accessToken,
+      1 * 24 * 60 * 60 * 1000 // 1 ngày
+    );
+
     await this.cacheManager.set(
       `REFRESH:${user.username}`,
-      refreshToken,
+      hashed,
       7 * 24 * 60 * 60 * 1000 // 7 ngày
     );
 
@@ -181,7 +214,7 @@ export class AuthService {
 
       const savedToken = await this.cacheManager.get<string>(`REFRESH:${username}`);
 
-      if (!savedToken || savedToken !== crypto.createHash('sha256').update(refreshToken).digest('hex')) {
+      if (!savedToken || savedToken !== refreshToken) {
         throw new RpcException({
           code: status.UNAUTHENTICATED,
           message: 'Invalid refresh token'
@@ -212,6 +245,12 @@ export class AuthService {
       const timeConLaiTokenCu = (ttl || Date.now() + 7 * 24 * 60 * 60 * 1000) - Date.now();
 
       await this.cacheManager.set(
+        `ACCESS:${user.username}`,
+        newAccessToken,
+        1 * 24 * 60 * 60 * 1000 // 1 ngày
+      );
+
+      await this.cacheManager.set(
         `REFRESH:${username}`,
         hashed,
         timeConLaiTokenCu // 7 * 24 * 60 * 60 * 1000 (Nếu muốn login vô hạn)
@@ -240,6 +279,9 @@ export class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(data.newPassword, salt);
+
+    // xóa access để kick user 
+    await this.cacheManager.del(`ACCESS:${user.username}`);
 
     await this.saveUser(user);
     return { success: true };
@@ -285,6 +327,8 @@ export class AuthService {
 
     await this.saveUser(user);
     await this.cacheManager.del(`RESET_OTP:${user.username}`);
+    // xóa access để kick user 
+    await this.cacheManager.del(`ACCESS:${user.username}`);
 
     // this.emailClient.emit('send_email', {
     //   to: user.email,
