@@ -111,7 +111,7 @@ export class AuthService {
         this.mailerService.sendMail({ // bỏ await để tránh user đợi lâu, cách thường
           to: user.email,
           subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
-          html: securityAlertEmailTemplate(user.realname),
+          html: securityAlertEmailTemplate(user.realname,user.username),
         });
         throw new RpcException({code: status.UNAUTHENTICATED , message: 'Sai mật khẩu quá nhiều. Tài khoản bị vô hiệu 10 phút'});
       }
@@ -275,7 +275,7 @@ export class AuthService {
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
 
     const isMatch = await bcrypt.compare(data.oldPassword, user.password);
-    if (!isMatch) throw new RpcException({ code: status.UNAUTHENTICATED, message: 'Mật khẩu cũ không đúng' });
+    if (!isMatch) throw new RpcException({ code: status.UNAUTHENTICATED, message: 'Mật khẩu cũ không đúng, không thể đổi mật khẩu' });
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(data.newPassword, salt);
@@ -306,7 +306,7 @@ export class AuthService {
     this.mailerService.sendMail({
       to: user.email,
       subject: 'OTP reset mật khẩu',
-      html: otpResetPassTemplate(user.realname, otp)
+      html: otpResetPassTemplate(user.realname,user.username, otp)
     });
 
     return { success: true };
@@ -446,7 +446,7 @@ export class AuthService {
       const user = await this.findByUsername(data.who);
       if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
 
-      const html = ManagerEmailTemplate(data.title, data.content, user.realname);
+      const html = ManagerEmailTemplate(data.title, data.content, user.realname, user.username);
       this.emailClient.emit('send_email', { to: user.email, subject: data.title, html });
     }
 

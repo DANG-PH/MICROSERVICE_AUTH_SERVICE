@@ -30,8 +30,11 @@ export function otpEmailTemplate(user: any, otp: string) {
             NGỌC RỒNG ONLINE
           </h2>
 
-          <p style="font-size:14px; line-height:1.5; color: #f8fafc !important;">
-            Xin chào ${user.realname},<br/>
+          <p style="font-size:14px; line-height:1.5; color:#f8fafc !important;">
+            Xin chào 
+            ${user.realname}
+            <span style="font-size:12px; opacity:0.9;">(${user.username})</span>,
+            <br/>
             Bạn đang yêu cầu đăng nhập tài khoản. Vui lòng dùng mã bên dưới để xác thực:
           </p>
 
@@ -69,7 +72,7 @@ export function otpEmailTemplate(user: any, otp: string) {
 }
 
 
-export function securityAlertEmailTemplate(realname: string) {
+export function securityAlertEmailTemplate(realname: string, username: string) {
   return `
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
@@ -101,8 +104,11 @@ export function securityAlertEmailTemplate(realname: string) {
         CẢNH BÁO BẢO MẬT – NGỌC RỒNG ONLINE
       </h2>
 
-      <p style="font-size:14px; line-height:1.5; color: #ffe4e6 !important;">
-        Xin chào <b>${realname}</b>,<br/>
+      <p style="font-size:14px; line-height:1.5; color:#ffe4e6 !important;">
+        Xin chào 
+        <b>${realname}</b>
+        <span style="font-size:12px; opacity:0.9;">(${username})</span>,
+        <br/>
         Chúng tôi vừa phát hiện nhiều lần đăng nhập thất bại bất thường
         vào tài khoản của bạn trong thời gian ngắn.
       </p>
@@ -136,7 +142,7 @@ export function securityAlertEmailTemplate(realname: string) {
 }
 
 // ===== RESET PASSWORD EMAIL TEMPLATE =====
-export function resetPasswordEmailTemplate(user: { realname: string }): string {
+export function resetPasswordEmailTemplate(user: any): string {
   return `
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
@@ -159,7 +165,10 @@ export function resetPasswordEmailTemplate(user: { realname: string }): string {
       <h2 style="text-align:center; margin-bottom:12px; color:#f97316;">MẬT KHẨU ĐÃ ĐƯỢC ĐẶT LẠI</h2>
 
       <p style="font-size:14px; line-height:1.5;">
-        Xin chào ${user.realname},<br/>
+        Xin chào 
+        ${user.realname}
+        <span style="font-size:12px; opacity:0.9;">(${user.username})</span>,
+        <br/>
         Mật khẩu của bạn đã được đặt lại thành công.
       </p>
 
@@ -177,7 +186,7 @@ export function resetPasswordEmailTemplate(user: { realname: string }): string {
 }
 
 // ===== CHANGE EMAIL CONFIRMATION EMAIL TEMPLATE =====
-export function changeEmailConfirmationTemplate(user: { realname: string }, newEmail: string): string {
+export function changeEmailConfirmationTemplate(user: any, newEmail: string): string {
   return `
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
@@ -200,7 +209,10 @@ export function changeEmailConfirmationTemplate(user: { realname: string }, newE
       <h2 style="text-align:center; margin-bottom:12px; color:#38bdf8;">EMAIL ĐÃ ĐƯỢC CẬP NHẬT</h2>
 
       <p style="font-size:14px; line-height:1.5;">
-        Xin chào ${user.realname},<br/>
+        Xin chào 
+        ${user.realname}
+        <span style="font-size:12px; opacity:0.9;">(${user.username})</span>,
+        <br/>
         Email của bạn đã được cập nhật thành <b>${newEmail}</b>.
       </p>
 
@@ -217,7 +229,7 @@ export function changeEmailConfirmationTemplate(user: { realname: string }, newE
   `;
 }
 
-export function otpResetPassTemplate(realname: string, otp: string): string {
+export function otpResetPassTemplate(realname: string, username: string, otp: string): string {
   return `
     <meta name="color-scheme" content="light dark">
     <meta name="supported-color-schemes" content="light dark">
@@ -240,7 +252,10 @@ export function otpResetPassTemplate(realname: string, otp: string): string {
       <h2 style="text-align:center; margin-bottom:12px; color:#38bdf8;">YÊU CẦU RESET MẬT KHẨU</h2>
 
       <p style="font-size:14px; line-height:1.5;">
-        Xin chào ${realname},<br/>
+        Xin chào 
+        ${realname}
+        <span style="font-size:12px; opacity:0.9;">(${username})</span>,
+        <br/>
         Bạn vừa yêu cầu đặt lại mật khẩu. Vui lòng sử dụng mã OTP bên dưới để xác thực:
       </p>
 
@@ -278,8 +293,8 @@ export function ManagerEmailTemplate(
   title: string,
   content: string,
   realname?: string,
+  username?:string
 ) {
-  console.log(realname)
   const displayName = realname || "Chiến Binh";
 
   // Danh sách màu "an toàn" (ngoại trừ đỏ)
@@ -351,8 +366,11 @@ export function ManagerEmailTemplate(
         ${title.toUpperCase()}
       </h2>
 
-      <p style="font-size:14px; line-height:1.6; color: #c7d2fe !important;">
-        Xin chào <b>${displayName}</b>,<br/>
+      <p style="font-size:14px; line-height:1.6; color:#c7d2fe !important;">
+        Xin chào 
+        <b>${displayName}</b>
+        ${username ? `<span style="font-size:12px; opacity:0.9;">(${username})</span>` : ''}
+        <br/>
         ${content}
       </p>
 
