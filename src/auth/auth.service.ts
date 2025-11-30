@@ -68,11 +68,11 @@ export class AuthService {
     return { success: true, auth_id: userMoi.id };
   }
 
-  async login(data: LoginRequest): Promise<LoginResponse> {
+  async login(data: LoginRequest, platform: string): Promise<LoginResponse> {
     const user = await this.findByUsername(data.username);
     if (!user) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'User not found'});
 
-    const isOnline = await this.cacheManager.get(`online:${data.username}`);
+    const isOnline = await this.cacheManager.get(`online:${data.username}:${platform}`);
     if (isOnline) { 
       const lastMailTime = await this.cacheManager.get<number>(`MAIL_SENT_ONLINE:${user.username}`);
       const now = Date.now();
@@ -91,7 +91,7 @@ export class AuthService {
 
         await this.cacheManager.set(`MAIL_SENT_ONLINE:${user.username}`, now, 5 * 60 * 1000); // lưu trong 5 phút
       }
-      throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đang online, nếu không phải bạn vui lòng yêu cầu reset mật khẩu.'});
+      throw new RpcException({code: status.PERMISSION_DENIED , message: `Tài khoản đang online trên cùng nền tảng ${platform}, nếu không phải bạn vui lòng yêu cầu reset mật khẩu.`});
     };
 
     const isLocked = await this.cacheManager.get(`LOCK:${data.username}`);
