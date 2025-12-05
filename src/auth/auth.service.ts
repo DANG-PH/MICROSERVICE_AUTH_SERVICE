@@ -138,7 +138,6 @@ export class AuthService {
       html: otpEmailTemplate(user, otp),
     });
 
-
     const sessionId = Buffer.from(user.username).toString('base64');
     return { sessionId };
   }
@@ -440,6 +439,14 @@ export class AuthService {
     if (data.who.toUpperCase() === "ALL") {
       const html = ManagerEmailTemplate(data.title, data.content);
       const emails = Array.from(new Set((await this.userRepository.find({ select: ['email'] })).map(e => e.email)));
+
+      this.emailClient.emit('send_emails', { emails, subject: data.title, html });
+    } else if (data.who.toUpperCase() === "ADMIN") {
+      const html = ManagerEmailTemplate(data.title, data.content, "ADMIN", "HDGSTUDIO");
+      const emails = Array.from(new Set((await this.userRepository.find({ 
+        where: { role: 'ADMIN' }, 
+        select: ['email'] 
+      })).map(e => e.email)));
 
       this.emailClient.emit('send_emails', { emails, subject: data.title, html });
     } else {
