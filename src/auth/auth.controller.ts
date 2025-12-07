@@ -25,23 +25,27 @@ export class AuthController {
   }
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'Refresh')
-  async refresh(data: { refreshToken: string }) {
-    return await this.authService.refresh(data.refreshToken);
+  async refresh(data: { refreshToken: string }, metadata: Metadata) {
+    const platform = metadata.get('platform')[0] as string;
+    return await this.authService.refresh(data.refreshToken, platform);
   }
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'VerifyOTP')
-  async verifyotp( data: VerifyOtpRequest) {
-    return await this.authService.verifyOtp(data);
+  async verifyotp( data: VerifyOtpRequest, metadata: Metadata) {
+    const platform = metadata.get('platform')[0] as string;
+    return await this.authService.verifyOtp(data, platform);
   }
   // ===== USER METHODS =====
   @GrpcMethod(AUTH_SERVICE_NAME, 'ChangePassword')
-  async changePassword(data: ChangePasswordRequest): Promise<ChangePasswordResponse> {
-    return await this.authService.changePassword(data);
+  async changePassword(data: ChangePasswordRequest, metadata: Metadata): Promise<ChangePasswordResponse> {
+    const platform = metadata.get('platform')[0] as string;
+    return await this.authService.changePassword(data, platform);
   }
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'ResetPassword')
-  async resetPassword(data: ResetPasswordRequest): Promise<ResetPasswordResponse> {
-    return await this.authService.resetPassword(data);
+  async resetPassword(data: ResetPasswordRequest, metadata: Metadata): Promise<ResetPasswordResponse> {
+    const platform = metadata.get('platform')[0] as string;
+    return await this.authService.resetPassword(data, platform);
   }
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'ChangeEmail')

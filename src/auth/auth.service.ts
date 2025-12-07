@@ -157,7 +157,7 @@ export class AuthService {
     return { sessionId };
   }
 
-  async verifyOtp(data : VerifyOtpRequest): Promise<VerifyOtpResponse> {
+  async verifyOtp(data : VerifyOtpRequest, platform: string): Promise<VerifyOtpResponse> {
     const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
     const user = await this.findByUsername(username);
 
@@ -186,13 +186,13 @@ export class AuthService {
 
 
     await this.cacheManager.set(
-      `ACCESS:${user.username}`,
+      `ACCESS:${user.username}:${platform}`,
       accessToken,
       1 * 24 * 60 * 60 * 1000 // 1 ngày
     );
 
     await this.cacheManager.set(
-      `REFRESH:${user.username}`,
+      `REFRESH:${user.username}:${platform}`,
       hashed,
       7 * 24 * 60 * 60 * 1000 // 7 ngày
     );
@@ -205,13 +205,13 @@ export class AuthService {
     };
   }
 
-  async refresh(refreshToken: string): Promise<{ access_token: string, refresh_token: string }> {
+  async refresh(refreshToken: string, platform: string): Promise<{ access_token: string, refresh_token: string }> {
     try {
       const decoded = this.jwtService.verify(refreshToken);
 
       const username = decoded.username;
 
-      const savedToken = await this.cacheManager.get<string>(`REFRESH:${username}`);
+      const savedToken = await this.cacheManager.get<string>(`REFRESH:${username}:${platform}`);
 
       if (!savedToken || savedToken !== refreshToken) {
         throw new RpcException({
@@ -239,18 +239,18 @@ export class AuthService {
                            .update(newRefreshToken)
                            .digest('hex'); // nếu bỏ digest thì hashed là giá trị binary khó đọc, có thể dùng hex hoặc base64
 
-      const ttl = await this.cacheManager.ttl(`REFRESH:${username}`);
+      const ttl = await this.cacheManager.ttl(`REFRESH:${username}:${platform}`);
 
       const timeConLaiTokenCu = (ttl || Date.now() + 7 * 24 * 60 * 60 * 1000) - Date.now();
 
       await this.cacheManager.set(
-        `ACCESS:${user.username}`,
+        `ACCESS:${user.username}:${platform}`,
         newAccessToken,
         1 * 24 * 60 * 60 * 1000 // 1 ngày
       );
 
       await this.cacheManager.set(
-        `REFRESH:${username}`,
+        `REFRESH:${username}:${platform}`,
         hashed,
         timeConLaiTokenCu // 7 * 24 * 60 * 60 * 1000 (Nếu muốn login vô hạn)
       );
@@ -268,7 +268,7 @@ export class AuthService {
   }
 
   // ===== USER METHODS =====
-  async changePassword(data: ChangePasswordRequest): Promise<ChangePasswordResponse> {
+  async changePassword(data: ChangePasswordRequest, platform: string): Promise<ChangePasswordResponse> {
     const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
     const user = await this.findByUsername(username);
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
@@ -280,7 +280,7 @@ export class AuthService {
     user.password = await bcrypt.hash(data.newPassword, salt);
 
     // xóa access để kick user 
-    await this.cacheManager.del(`ACCESS:${user.username}`);
+    await this.cacheManager.del(`ACCESS:${user.username}:${platform}`);
 
     await this.saveUser(user);
     return { success: true };
@@ -311,7 +311,7 @@ export class AuthService {
     return { success: true };
   }
 
-  async resetPassword(data: ResetPasswordRequest): Promise<ResetPasswordResponse> {
+  async resetPassword(data: ResetPasswordRequest, platform: string): Promise<ResetPasswordResponse> {
     const user = await this.findByUsername(data.username);
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
 
@@ -327,7 +327,7 @@ export class AuthService {
     await this.saveUser(user);
     await this.cacheManager.del(`RESET_OTP:${user.username}`);
     // xóa access để kick user 
-    await this.cacheManager.del(`ACCESS:${user.username}`);
+    await this.cacheManager.del(`ACCESS:${user.username}:${platform}`);
 
     // this.emailClient.emit('send_email', {
     //   to: user.email,
