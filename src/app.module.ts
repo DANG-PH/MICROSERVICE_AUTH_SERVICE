@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from './redis/redis.module';
 import { PayModule } from './pay/pay.module';
+import { SocialNetworkModule } from './social_network/social_network.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { PayModule } from './pay/pay.module';
     AuthModule,
     RedisModule,
     PayModule,
+    SocialNetworkModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -368,6 +368,16 @@ export class AuthService {
     return { success: true };
   }
 
+  async changeAvatar(data: ChangeAvatarRequest): Promise<ChangeAvatarResponse> {
+    const user = await this.userRepository.findOne({ where : { id: data.userId }});
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    user.avatarUrl = data.avatarUrl;
+    await this.saveUser(user);
+
+    return { success: true };
+  }
+
   // ===== ADMIN METHODS =====
   async changeRole(data: ChangeRoleRequest): Promise<ChangeRoleResponse> {
     const user = await this.findByUsername(data.username);
@@ -430,7 +440,8 @@ export class AuthService {
 
     return { 
       biBan: user.biBan,
-      role: user.role
+      role: user.role,
+      avatarUrl: user.avatarUrl
     };
   }
 

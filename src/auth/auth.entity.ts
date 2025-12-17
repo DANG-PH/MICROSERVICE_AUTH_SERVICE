@@ -23,6 +23,9 @@ export class AuthEntity {
   @Column({ nullable: true })
   password: string;
 
+  @Column({ nullable: true, default: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ_kwJh8vqmnSIbpOpY3sAGdIP4B7gEUnnYrQ&s' })
+  avatarUrl: string;
+
   // @Column({ nullable: true })
   // otp: string;
 
