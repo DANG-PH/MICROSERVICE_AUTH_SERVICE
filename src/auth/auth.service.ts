@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -471,6 +471,42 @@ export class AuthService {
     return { success: true };
   }
 
+  async getRealnameAvatar(data: GetRealnameAvatarRequest): Promise<GetRealnameAvatarResponse> {
+    const { userIds } = data;
+
+    if (!userIds || userIds.length === 0) {
+      return { realnameAvatarInfo: [] };
+    }
+
+    const users = await this.userRepository.find({
+      where: { id: In(userIds) },
+      select: ['id', 'realname', 'avatarUrl'], // chỉ lấy trường cần thiết
+    });
+
+    const realnameAvatarInfo = users.map(u => ({
+      userId: u.id,
+      realname: u.realname || '',
+      avatarUrl: u.avatarUrl || '',
+    }));
+
+    return { realnameAvatarInfo };
+  }
+
+  async getAllUser(data: GetAllUserRequest): Promise<GetAllUserResponse> {
+    const users = await this.userRepository.find({
+      select: ['id', 'realname', 'avatarUrl']
+    })
+
+    const usersProto = users.map((u) => {
+      return {
+        userId: u.id,
+        realname: u.realname,
+        avatarUrl: u.avatarUrl
+      }
+    })
+
+    return { userTraVe: usersProto };
+  }
 
   private async incrementLoginAttempt(username: string): Promise<number> {
     const key = `LOGIN_FAIL:${username}`;
