@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -18,9 +18,12 @@ import { ClientProxy } from '@nestjs/microservices';
 import { PayService } from 'src/pay/pay.service';
 import * as crypto from 'crypto';
 import { ref } from 'process';
+import { OAuth2Client } from 'google-auth-library';
+import { TokenPayload } from 'google-auth-library';
 
 @Injectable()
 export class AuthService {
+  private client: OAuth2Client;
   constructor(
     @InjectRepository(AuthEntity)
     private readonly userRepository: Repository<AuthEntity>,
@@ -29,7 +32,9 @@ export class AuthService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     @Inject(String(process.env.RABBIT_SERVICE)) private readonly emailClient: ClientProxy,
     private readonly payService: PayService,
-  ) {}
+  ) {
+      this.client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+  }
 
   async saveUser(user: AuthEntity): Promise<AuthEntity> {
     return await this.userRepository.save(user);
@@ -49,6 +54,7 @@ export class AuthService {
   }
 
   async register(data: RegisterRequest): Promise<RegisterResponse> {
+    if (data.username.includes("@gmail.com")) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Username không thể là email'});
     const exists = await this.existsByUsername(data.username);
     if (exists)  throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Đã tồn tại User'});
 
@@ -61,6 +67,7 @@ export class AuthService {
     userMoi.email = data.email;
     userMoi.realname = data.realname;
     userMoi.role = 'USER';
+    userMoi.type = 0;
     userMoi.biBan = false;
 
     await this.saveUser(userMoi);
@@ -508,6 +515,125 @@ export class AuthService {
     return { userTraVe: usersProto };
   }
 
+  async loginWithGoogle(data: LoginWithGoogleRequest, platform: string): Promise<LoginWithGoogleResponse> {
+    const dataToken = await this.verifyGoogleToken(data.tokenFromGoogle);
+    if (!dataToken) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Token không hợp lệ'});
+
+    if (!dataToken.email_verified) {
+      throw new RpcException({
+        code: status.PERMISSION_DENIED,
+        message: 'Email Google chưa được xác thực'
+      });
+    }
+
+    if (!dataToken.email || !dataToken.name || !dataToken.picture) {
+      throw new RpcException({
+        code: status.PERMISSION_DENIED,
+        message: 'Token thiếu trường dữ liệu, vui lòng đăng nhập lại!'
+      });
+    }
+
+    let user = await this.findByUsername(dataToken.email);
+    if (!user) {
+      const salt = await bcrypt.genSalt(10);
+      const passwordAccount = generateStrongPassword()
+      const passwordHash = await bcrypt.hash(passwordAccount, salt);
+
+      const userMoi = new AuthEntity();
+      userMoi.username = dataToken.email;
+      userMoi.password = passwordHash;
+      userMoi.email = dataToken.email;
+      userMoi.realname = dataToken.name;
+      userMoi.role = 'USER';
+      userMoi.type = 1;
+      userMoi.avatarUrl = dataToken.picture;
+      userMoi.biBan = false;
+
+      const userMoiTao = await this.saveUser(userMoi);
+      user = userMoiTao
+
+      const html = ManagerEmailTemplate(
+        `Chào mừng người chơi <br> ${user.realname}`,
+        `Chào mừng bạn đã đến với thế giới Ngọc rồng online (thông qua cách đăng ký với google)
+        <br>
+        Đây là tài khoản đăng nhập game của bạn:
+        <br>
+        <b>username</b>: ${user.username}
+        <br>
+        <b>password</b>: ${passwordAccount}
+        <br>
+        Vui lòng không chia sẻ thông tin trên cho bất kỳ ai
+        <br>
+        <i>Lưu ý: Bạn có thể đổi mật khẩu tại website của game, bạn có thể dùng tài khoản này hoặc login bằng google trên website</i>.
+        <br>
+        Xin cảm ơn!
+        `,
+        user.realname
+      );
+      this.mailerService.sendMail({
+        to: user.email,
+        subject: "[NRO]Chào mừng tân thủ",
+        html
+      });
+    }
+
+    const isOnline = await this.cacheManager.get(`online:${user.username}:${platform}`);
+    if (isOnline) { 
+      const lastMailTime = await this.cacheManager.get<number>(`MAIL_SENT_ONLINE:${user.username}`);
+      const now = Date.now();
+
+      if (!lastMailTime || now - lastMailTime > 5 * 60 * 1000) { // 5 phút
+        const html = ManagerEmailTemplate(
+          "CẢNH BÁO BẢO MẬT",
+          "Hệ thống vừa phát hiện một nỗ lực đăng nhập đáng ngờ từ thiết bị hoặc địa điểm lạ vào tài khoản của bạn. Để bảo vệ tài khoản, vui lòng reset mật khẩu ngay lập tức. Nếu không phải bạn thực hiện, hãy liên hệ với bộ phận hỗ trợ để được trợ giúp và tránh rủi ro mất quyền truy cập. An toàn của bạn là ưu tiên hàng đầu!",
+          user.realname
+        );
+        this.mailerService.sendMail({
+          to: user.email,
+          subject: "CẢNH BÁO BẢO MẬT",
+          html
+        });
+
+        await this.cacheManager.set(`MAIL_SENT_ONLINE:${user.username}`, now, 5 * 60 * 1000); // lưu trong 5 phút
+      }
+      throw new RpcException({code: status.PERMISSION_DENIED , message: `Tài khoản đang online trên cùng nền tảng ${platform}, nếu không phải bạn vui lòng yêu cầu reset mật khẩu.`});
+    };
+
+    if (user.biBan) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin'});
+
+    const payload = { userId: user.id, username: user.username, role: user.role };
+
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '1d' }); // tamj thoi de 1d thay 15m
+    const refreshToken = this.jwtService.sign(
+      { username: user.username },
+      { expiresIn: '7d' }
+    );
+
+    const hashed = crypto.createHash('sha256')
+                      .update(refreshToken)
+                      .digest('hex'); // nếu bỏ digest thì hashed là giá trị binary khó đọc, có thể dùng hex hoặc base64
+
+
+    await this.cacheManager.set(
+      `ACCESS:${user.username}:${platform}`,
+      accessToken,
+      1 * 24 * 60 * 60 * 1000 // 1 ngày
+    );
+
+    await this.cacheManager.set(
+      `REFRESH:${user.username}:${platform}`,
+      hashed,
+      7 * 24 * 60 * 60 * 1000 // 7 ngày
+    );
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      auth_id: user.id,
+      role: user.role
+    };
+  }
+
   private async incrementLoginAttempt(username: string): Promise<number> {
     const key = `LOGIN_FAIL:${username}`;
     let attempts = (await this.cacheManager.get<number>(key)) || 0;
@@ -515,4 +641,55 @@ export class AuthService {
     await this.cacheManager.set(key, attempts, 15 * 60 * 1000); 
     return attempts;
   }
+
+  async verifyGoogleToken(idToken: string): Promise<TokenPayload> {
+    try {
+      const ticket = await this.client.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload) {
+        throw new RpcException({
+          code: status.UNAUTHENTICATED,
+          message: 'Google token không hợp lệ',
+        });
+      }
+
+      return payload;
+    } catch (err) {
+      // Bất kể token sai kiểu gì => luôn trả 401
+      throw new RpcException({
+        code: status.UNAUTHENTICATED,
+        message: 'Google token không hợp lệ hoặc đã hết hạn',
+      });
+    }
+  }
+}
+
+function generateStrongPassword(length = 14): string {
+  const lower = "abcdefghijklmnopqrstuvwxyz";
+  const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const numbers = "0123456789";
+  const special = "!@#$%^&*()_+-=[]{};:,.<>?";
+
+  const all = lower + upper + numbers + special;
+
+  // Bắt buộc mỗi loại 1 ký tự
+  let password = [
+    lower[Math.floor(Math.random() * lower.length)],
+    upper[Math.floor(Math.random() * upper.length)],
+    numbers[Math.floor(Math.random() * numbers.length)],
+    special[Math.floor(Math.random() * special.length)],
+  ];
+
+  // Sinh phần còn lại
+  for (let i = 0; i < length-4; i++) {
+    const randIndex = Math.floor(Math.random() * all.length);
+    password.push(all[randIndex]);
+  }
+
+  // Trộn ngẫu nhiên
+  return password.join('');
 }

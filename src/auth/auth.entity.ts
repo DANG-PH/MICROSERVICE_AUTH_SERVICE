@@ -29,6 +29,9 @@ export class AuthEntity {
   // @Column({ nullable: true })
   // otp: string;
 
+  @Column()
+  type: number; // 0 la login thuong, 1 la login google
+
   @CreateDateColumn()
   createdAt: Date;
 
