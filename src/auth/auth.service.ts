@@ -534,7 +534,9 @@ export class AuthService {
     }
 
     let user = await this.findByUsername(dataToken.email);
+    let register = false;
     if (!user) {
+      register = true;
       const salt = await bcrypt.genSalt(10);
       const passwordAccount = generateStrongPassword()
       const passwordHash = await bcrypt.hash(passwordAccount, salt);
@@ -630,7 +632,8 @@ export class AuthService {
       access_token: accessToken,
       refresh_token: refreshToken,
       auth_id: user.id,
-      role: user.role
+      role: user.role,
+      register: register,
     };
   }
 
