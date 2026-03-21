@@ -40,11 +40,11 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd /root/MICROSERVICE_AUTH_SERVICE
-            pm2 stop auth-service
+            git rev-parse HEAD > /tmp/prev_commit.txt
             git pull origin master
             npm install
             npm run build
-            pm2 restart auth-service
+            pm2 reload auth-service
 
       - name: Health Check & Rollback
         uses: appleboy/ssh-action@v1.0.0
@@ -69,10 +69,10 @@ jobs:
 
             echo "Health check failed after $((MAX_RETRIES * RETRY_INTERVAL))s, rolling back..."
             cd /root/MICROSERVICE_AUTH_SERVICE
-            git reset --hard HEAD~1
+            git reset --hard $(cat /tmp/prev_commit.txt)
             npm install
             npm run build
-            pm2 restart auth-service
+            pm2 reload auth-service
             exit 1
 
       - name: Notify Telegram Success
