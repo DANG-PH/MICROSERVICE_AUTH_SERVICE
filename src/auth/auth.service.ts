@@ -529,53 +529,45 @@ export class AuthService {
       });
     }
 
-    const isOnline = await this.cacheManager.get(`online:${user.username}:${platform}`);
-    if (isOnline) { 
-      const lastMailTime = await this.cacheManager.get<number>(`MAIL_SENT_ONLINE:${user.username}`);
-      const now = Date.now();
-
-      if (!lastMailTime || now - lastMailTime > 5 * 60 * 1000) { // 5 phút
-        const html = ManagerEmailTemplate(
-          "CẢNH BÁO BẢO MẬT",
-          "Hệ thống vừa phát hiện một nỗ lực đăng nhập đáng ngờ từ thiết bị hoặc địa điểm lạ vào tài khoản của bạn. Để bảo vệ tài khoản, vui lòng reset mật khẩu ngay lập tức. Nếu không phải bạn thực hiện, hãy liên hệ với bộ phận hỗ trợ để được trợ giúp và tránh rủi ro mất quyền truy cập. An toàn của bạn là ưu tiên hàng đầu!",
-          user.realname
-        );
-        this.mailerService.sendMail({
-          to: user.email,
-          subject: "CẢNH BÁO BẢO MẬT",
-          html
-        });
-
-        await this.cacheManager.set(`MAIL_SENT_ONLINE:${user.username}`, now, 5 * 60 * 1000); // lưu trong 5 phút
-      }
-      throw new RpcException({code: status.PERMISSION_DENIED , message: `Tài khoản đang online trên cùng nền tảng ${platform}, nếu không phải bạn vui lòng yêu cầu reset mật khẩu.`});
-    };
-
     if (user.biBan) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin'});
 
-    const payload = { userId: user.id, username: user.username, role: user.role };
+    const sessionId = randomUUID();
+    const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 ngày
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '1d' }); // tamj thoi de 1d thay 15m
+    // Tạo session cho cả game lẫn web — hybrid session
+    await this.cacheManager.set(
+      `session:${sessionId}`,
+      {
+        userId: user.id,
+        username: user.username,
+        platform,            // 'game' | 'web'
+        state: 'idle',       // game sẽ chuyển sang 'playing' khi gọi /play
+        createdAt: Date.now(),
+      },
+      SESSION_TTL_MS,
+    );
+
+    // Web: ghi vào set để support multi-session
+    if (platform === 'web') {
+      // dùng Redis trực tiếp nếu cacheManager không hỗ trợ SADD
+      await this.redis.sadd(`user:${user.id}:webSessions`, sessionId);
+    }
+
+    // sessionId đưa vào JWT payload — guard sẽ dùng để check Redis
+    const payload = {
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      sessionId,   
+      platform,
+    };
+
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: '1d',
+    });
     const refreshToken = this.jwtService.sign(
-      { username: user.username },
-      { expiresIn: '7d' }
-    );
-
-    const hashed = crypto.createHash('sha256')
-                      .update(refreshToken)
-                      .digest('hex'); // nếu bỏ digest thì hashed là giá trị binary khó đọc, có thể dùng hex hoặc base64
-
-
-    await this.cacheManager.set(
-      `ACCESS:${user.username}:${platform}`,
-      accessToken,
-      1 * 24 * 60 * 60 * 1000 // 1 ngày
-    );
-
-    await this.cacheManager.set(
-      `REFRESH:${user.username}:${platform}`,
-      hashed,
-      7 * 24 * 60 * 60 * 1000 // 7 ngày
+      { username: user.username, sessionId },
+      { expiresIn: '7d' },
     );
 
     return {
