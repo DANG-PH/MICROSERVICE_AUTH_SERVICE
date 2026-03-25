@@ -20,10 +20,13 @@ import * as crypto from 'crypto';
 import { ref } from 'process';
 import { OAuth2Client } from 'google-auth-library';
 import { TokenPayload } from 'google-auth-library';
+import { randomUUID } from 'crypto';
+import Redis from 'ioredis';
 
 @Injectable()
 export class AuthService {
   private client: OAuth2Client;
+  private redis: Redis;
   constructor(
     @InjectRepository(AuthEntity)
     private readonly userRepository: Repository<AuthEntity>,
@@ -34,6 +37,7 @@ export class AuthService {
     private readonly payService: PayService,
   ) {
       this.client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+      this.redis = new Redis(process.env.REDIS_URL || '')
   }
 
   async saveUser(user: AuthEntity): Promise<AuthEntity> {
@@ -77,76 +81,53 @@ export class AuthService {
 
   async login(data: LoginRequest, platform: string): Promise<LoginResponse> {
     const user = await this.findByUsername(data.username);
-    if (!user) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'User not found'});
-
-    const isOnline = await this.cacheManager.get(`online:${data.username}:${platform}`);
-    if (isOnline) { 
-      const lastMailTime = await this.cacheManager.get<number>(`MAIL_SENT_ONLINE:${user.username}`);
-      const now = Date.now();
-
-      if (!lastMailTime || now - lastMailTime > 5 * 60 * 1000) { // 5 phút
-        const html = ManagerEmailTemplate(
-          "CẢNH BÁO BẢO MẬT",
-          "Hệ thống vừa phát hiện một nỗ lực đăng nhập đáng ngờ từ thiết bị hoặc địa điểm lạ vào tài khoản của bạn. Để bảo vệ tài khoản, vui lòng reset mật khẩu ngay lập tức. Nếu không phải bạn thực hiện, hãy liên hệ với bộ phận hỗ trợ để được trợ giúp và tránh rủi ro mất quyền truy cập. An toàn của bạn là ưu tiên hàng đầu!",
-          user.realname
-        );
-        this.mailerService.sendMail({
-          to: user.email,
-          subject: "CẢNH BÁO BẢO MẬT",
-          html
-        });
-
-        await this.cacheManager.set(`MAIL_SENT_ONLINE:${user.username}`, now, 5 * 60 * 1000); // lưu trong 5 phút
-      }
-      throw new RpcException({code: status.PERMISSION_DENIED , message: `Tài khoản đang online trên cùng nền tảng ${platform}, nếu không phải bạn vui lòng yêu cầu reset mật khẩu.`});
-    };
+    if (!user)
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'User not found' });
 
     const isLocked = await this.cacheManager.get(`LOCK:${data.username}`);
-    if (isLocked) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản bị vô hiệu 10 phút do sai thông tin đăng nhập quá nhiều.'});
+    if (isLocked)
+      throw new RpcException({
+        code: status.PERMISSION_DENIED,
+        message: 'Tài khoản bị vô hiệu 10 phút do sai thông tin đăng nhập quá nhiều.',
+      });
 
     const passwordMatch = await bcrypt.compare(data.password, user.password);
     if (!passwordMatch) {
       const attempts = await this.incrementLoginAttempt(data.username);
-
       if (attempts > 5) {
         await this.cacheManager.set(`LOCK:${user.username}`, true, 10 * 60 * 1000);
-        // this.emailClient.emit('send_email', {
-        //   to: user.email,
-        //   subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
-        //   html: securityAlertEmailTemplate(user.realname),
-        // }); // cách dùng rabbitMQ
-        this.mailerService.sendMail({ // bỏ await để tránh user đợi lâu, cách thường
+        this.emailClient.emit('send_email', {
           to: user.email,
           subject: 'Cảnh báo bảo mật – Tài khoản bị khóa tạm thời',
-          html: securityAlertEmailTemplate(user.realname,user.username),
+          html: securityAlertEmailTemplate(user.realname, user.username),
         });
-        throw new RpcException({code: status.UNAUTHENTICATED , message: 'Sai mật khẩu quá nhiều. Tài khoản bị vô hiệu 10 phút'});
+        throw new RpcException({
+          code: status.UNAUTHENTICATED,
+          message: 'Sai mật khẩu quá nhiều. Tài khoản bị vô hiệu 10 phút',
+        });
       }
-
-      throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Sai mật khẩu, vui lòng thử lại'});
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'Sai mật khẩu, vui lòng thử lại' });
     }
 
-    if (user.biBan) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin'});
+    if (user.biBan)
+      throw new RpcException({
+        code: status.PERMISSION_DENIED,
+        message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin',
+      });
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
     await this.cacheManager.set(`OTP:${user.username}`, otp, 5 * 60 * 1000);
 
-    // thay vì gửi mail luôn thì mình dùng rabbitMQ để xử lí bất đồng bộ
-    // this.emailClient.emit('send_email', {
-    //   to: user.email,
-    //   subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
-    //   html: otpEmailTemplate(user, otp),
-    // });
-
-    this.mailerService.sendMail({
+    this.emailClient.emit('send_email', {
       to: user.email,
       subject: 'Xác thực đăng nhập – Ngọc Rồng Online',
       html: otpEmailTemplate(user, otp),
     });
 
-    const sessionId = Buffer.from(user.username).toString('base64');
-    return { sessionId };
+    // Trả về sessionId tạm để FE gọi verifyOtp
+    // Dùng base64(username) như cũ — chỉ là temp identifier, không phải session thật
+    const tempId = Buffer.from(user.username).toString('base64');
+    return { sessionId: tempId };
   }
 
   async checkAccount(data: LoginRequest): Promise<LoginResponse> {
@@ -164,51 +145,62 @@ export class AuthService {
     return { sessionId };
   }
 
-  async verifyOtp(data : VerifyOtpRequest, platform: string): Promise<VerifyOtpResponse> {
+  async verifyOtp(data: VerifyOtpRequest, platform: string): Promise<VerifyOtpResponse> {
     const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
     const user = await this.findByUsername(username);
+    if (!user)
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'User not found' });
 
-    if (!user) throw new RpcException({ code: status.UNAUTHENTICATED, message: 'User not found'});
-    
     const otpInCache = await this.cacheManager.get<string>(`OTP:${username}`);
+    if (!otpInCache || otpInCache !== data.otp)
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'OTP sai hoặc hết hạn' });
 
-    if (!otpInCache || otpInCache !== data.otp) {
-      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'OTP sai hoặc hết hạn'});
-    }
-
-    // Xóa OTP sau khi sử dụng
     await this.cacheManager.del(`OTP:${username}`);
 
-    const payload = { userId: user.id, username: user.username, role: user.role };
+    const sessionId = randomUUID();
+    const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 ngày
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '1d' }); // tamj thoi de 1d thay 15m
+    // Tạo session cho cả game lẫn web — hybrid session
+    await this.cacheManager.set(
+      `session:${sessionId}`,
+      {
+        userId: user.id,
+        username: user.username,
+        platform,            // 'game' | 'web'
+        state: 'idle',       // game sẽ chuyển sang 'playing' khi gọi /play
+        createdAt: Date.now(),
+      },
+      SESSION_TTL_MS,
+    );
+
+    // Web: ghi vào set để support multi-session
+    if (platform === 'web') {
+      // dùng Redis trực tiếp nếu cacheManager không hỗ trợ SADD
+      await this.redis.sadd(`user:${user.id}:webSessions`, sessionId);
+    }
+
+    // sessionId đưa vào JWT payload — guard sẽ dùng để check Redis
+    const payload = {
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+      sessionId,   
+      platform,
+    };
+
+    const accessToken = this.jwtService.sign(payload, {
+      expiresIn: '1d',
+    });
     const refreshToken = this.jwtService.sign(
-      { username: user.username },
-      { expiresIn: '7d' }
-    );
-
-    const hashed = crypto.createHash('sha256')
-                      .update(refreshToken)
-                      .digest('hex'); // nếu bỏ digest thì hashed là giá trị binary khó đọc, có thể dùng hex hoặc base64
-
-
-    await this.cacheManager.set(
-      `ACCESS:${user.username}:${platform}`,
-      accessToken,
-      1 * 24 * 60 * 60 * 1000 // 1 ngày
-    );
-
-    await this.cacheManager.set(
-      `REFRESH:${user.username}:${platform}`,
-      hashed,
-      7 * 24 * 60 * 60 * 1000 // 7 ngày
+      { username: user.username, sessionId },
+      { expiresIn: '7d' },
     );
 
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
       auth_id: user.id,
-      role: user.role
+      role: user.role,
     };
   }
 
@@ -217,15 +209,10 @@ export class AuthService {
       const decoded = this.jwtService.verify(refreshToken);
 
       const username = decoded.username;
+      const sessionId = decoded.sessionId;
 
-      const savedToken = await this.cacheManager.get<string>(`REFRESH:${username}:${platform}`);
-
-      if (!savedToken || savedToken !== refreshToken) {
-        throw new RpcException({
-          code: status.UNAUTHENTICATED,
-          message: 'Invalid refresh token'
-        });
-      }
+      const session = await this.cacheManager.get(`session:${sessionId}`);
+      if (!session) throw new UnauthorizedException('Session hết hạn');
 
       const user = await this.findByUsername(username);
       if (!user || user.biBan) {
@@ -233,33 +220,13 @@ export class AuthService {
       }
 
       const newAccessToken = this.jwtService.sign(
-        { userId: user.id, username: username, role: user.role },
+        { userId: user.id, username, role: user.role, sessionId, platform },
         { expiresIn: '1d' }
       );
 
       const newRefreshToken = this.jwtService.sign(
-        { username: username },
+        { username, sessionId }, // giữ sessionId để lần refresh sau còn dùng
         { expiresIn: '7d' }
-      );
-
-      const hashed = crypto.createHash('sha256')
-                           .update(newRefreshToken)
-                           .digest('hex'); // nếu bỏ digest thì hashed là giá trị binary khó đọc, có thể dùng hex hoặc base64
-
-      const ttl = await this.cacheManager.ttl(`REFRESH:${username}:${platform}`);
-
-      const timeConLaiTokenCu = (ttl || Date.now() + 7 * 24 * 60 * 60 * 1000) - Date.now();
-
-      await this.cacheManager.set(
-        `ACCESS:${user.username}:${platform}`,
-        newAccessToken,
-        1 * 24 * 60 * 60 * 1000 // 1 ngày
-      );
-
-      await this.cacheManager.set(
-        `REFRESH:${username}:${platform}`,
-        hashed,
-        timeConLaiTokenCu // 7 * 24 * 60 * 60 * 1000 (Nếu muốn login vô hạn)
       );
 
       return { 
@@ -285,10 +252,7 @@ export class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(data.newPassword, salt);
-
-    // xóa access để kick user 
-    await this.cacheManager.del(`ACCESS:${user.username}:${platform}`);
-
+    await this.kickAllSessions(user.id);
     await this.saveUser(user);
     return { success: true };
   }
@@ -300,14 +264,6 @@ export class AuthService {
     const otp = Math.floor(100000 + Math.random() * 900000).toString(); // 6 số
 
     await this.cacheManager.set(`RESET_OTP:${user.username}`, otp, 5 * 60 * 1000);
-
-    // Gửi mail OTP
-
-    // this.emailClient.emit('send_email', {
-    //   to: user.email,
-    //   subject: 'OTP reset mật khẩu',
-    //   html: otpResetPassTemplate(user.realname, otp)
-    // });
     
     this.mailerService.sendMail({
       to: user.email,
@@ -333,14 +289,8 @@ export class AuthService {
 
     await this.saveUser(user);
     await this.cacheManager.del(`RESET_OTP:${user.username}`);
-    // xóa access để kick user 
-    await this.cacheManager.del(`ACCESS:${user.username}:${platform}`);
 
-    // this.emailClient.emit('send_email', {
-    //   to: user.email,
-    //   subject: 'Mật khẩu đã được đặt lại',
-    //   html: resetPasswordEmailTemplate(user),
-    // });
+    await this.kickAllSessions(user.id);
 
     this.mailerService.sendMail({
       to: user.email,
@@ -668,6 +618,32 @@ export class AuthService {
         message: 'Google token không hợp lệ hoặc đã hết hạn',
       });
     }
+  }
+
+  private async kickAllSessions(userId: number) {
+    // Kick game session — emit WS trước, xóa Redis sau
+    const gameSessionId = await this.cacheManager.get<string>(
+      `user:${userId}:gameSession`
+    );
+    if (gameSessionId) {
+      const socketId = await this.cacheManager.get<string>(
+        `session:${gameSessionId}:ws`
+      );
+      // if (socketId) {
+      //   // Emit kick qua WsGateway
+      //   await this.wsGateway.kickSocket(socketId);
+      // }
+      await this.cacheManager.del(`session:${gameSessionId}`);
+      await this.cacheManager.del(`session:${gameSessionId}:ws`);
+      await this.cacheManager.del(`user:${userId}:gameSession`);
+    }
+
+    // Kick tất cả web sessions
+    const webSessionIds = await this.redis.smembers(`user:${userId}:webSessions`);
+    for (const sid of webSessionIds) {
+      await this.cacheManager.del(`session:${sid}`);
+    }
+    await this.redis.del(`user:${userId}:webSessions`);
   }
 }
 
