@@ -157,34 +157,10 @@ export class AuthService {
 
     await this.cacheManager.del(`OTP:${username}`);
 
-    const sessionId = randomUUID();
-    const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 ngày
-
-    // Tạo session cho cả game lẫn web — hybrid session
-    await this.cacheManager.set(
-      `session:${sessionId}`,
-      {
-        userId: user.id,
-        username: user.username,
-        platform,            // 'game' | 'web'
-        state: 'idle',       // game sẽ chuyển sang 'playing' khi gọi /play
-        createdAt: Date.now(),
-      },
-      SESSION_TTL_MS,
-    );
-
-    // Web: ghi vào set để support multi-session
-    if (platform === 'web') {
-      // dùng Redis trực tiếp nếu cacheManager không hỗ trợ SADD
-      await this.redis.sadd(`user:${user.id}:webSessions`, sessionId);
-    }
-
-    // sessionId đưa vào JWT payload — guard sẽ dùng để check Redis
     const payload = {
       userId: user.id,
       username: user.username,
       role: user.role,
-      sessionId,   
       platform,
     };
 
@@ -192,7 +168,7 @@ export class AuthService {
       expiresIn: '1d',
     });
     const refreshToken = this.jwtService.sign(
-      { username: user.username, sessionId },
+      { username: user.username },
       { expiresIn: '7d' },
     );
 
@@ -209,10 +185,6 @@ export class AuthService {
       const decoded = this.jwtService.verify(refreshToken);
 
       const username = decoded.username;
-      const sessionId = decoded.sessionId;
-
-      const session = await this.cacheManager.get(`session:${sessionId}`);
-      if (!session) throw new UnauthorizedException('Session hết hạn');
 
       const user = await this.findByUsername(username);
       if (!user || user.biBan) {
@@ -220,12 +192,12 @@ export class AuthService {
       }
 
       const newAccessToken = this.jwtService.sign(
-        { userId: user.id, username, role: user.role, sessionId, platform },
+        { userId: user.id, username, role: user.role, platform },
         { expiresIn: '1d' }
       );
 
       const newRefreshToken = this.jwtService.sign(
-        { username, sessionId }, // giữ sessionId để lần refresh sau còn dùng
+        { username }, 
         { expiresIn: '7d' }
       );
 
@@ -252,7 +224,6 @@ export class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(data.newPassword, salt);
-    await this.kickAllSessions(user.id);
     await this.saveUser(user);
     return { success: true };
   }
@@ -289,8 +260,6 @@ export class AuthService {
 
     await this.saveUser(user);
     await this.cacheManager.del(`RESET_OTP:${user.username}`);
-
-    await this.kickAllSessions(user.id);
 
     this.mailerService.sendMail({
       to: user.email,
@@ -531,34 +500,10 @@ export class AuthService {
 
     if (user.biBan) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin'});
 
-    const sessionId = randomUUID();
-    const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 1 ngày
-
-    // Tạo session cho cả game lẫn web — hybrid session
-    await this.cacheManager.set(
-      `session:${sessionId}`,
-      {
-        userId: user.id,
-        username: user.username,
-        platform,            // 'game' | 'web'
-        state: 'idle',       // game sẽ chuyển sang 'playing' khi gọi /play
-        createdAt: Date.now(),
-      },
-      SESSION_TTL_MS,
-    );
-
-    // Web: ghi vào set để support multi-session
-    if (platform === 'web') {
-      // dùng Redis trực tiếp nếu cacheManager không hỗ trợ SADD
-      await this.redis.sadd(`user:${user.id}:webSessions`, sessionId);
-    }
-
-    // sessionId đưa vào JWT payload — guard sẽ dùng để check Redis
     const payload = {
       userId: user.id,
       username: user.username,
-      role: user.role,
-      sessionId,   
+      role: user.role,   
       platform,
     };
 
@@ -566,7 +511,7 @@ export class AuthService {
       expiresIn: '1d',
     });
     const refreshToken = this.jwtService.sign(
-      { username: user.username, sessionId },
+      { username: user.username },
       { expiresIn: '7d' },
     );
 
@@ -610,32 +555,6 @@ export class AuthService {
         message: 'Google token không hợp lệ hoặc đã hết hạn',
       });
     }
-  }
-
-  private async kickAllSessions(userId: number) {
-    // Kick game session — emit WS trước, xóa Redis sau
-    const gameSessionId = await this.cacheManager.get<string>(
-      `user:${userId}:gameSession`
-    );
-    if (gameSessionId) {
-      const socketId = await this.cacheManager.get<string>(
-        `session:${gameSessionId}:ws`
-      );
-      // if (socketId) {
-      //   // Emit kick qua WsGateway
-      //   await this.wsGateway.kickSocket(socketId);
-      // }
-      await this.cacheManager.del(`session:${gameSessionId}`);
-      await this.cacheManager.del(`session:${gameSessionId}:ws`);
-      await this.cacheManager.del(`user:${userId}:gameSession`);
-    }
-
-    // Kick tất cả web sessions
-    const webSessionIds = await this.redis.smembers(`user:${userId}:webSessions`);
-    for (const sid of webSessionIds) {
-      await this.cacheManager.del(`session:${sid}`);
-    }
-    await this.redis.del(`user:${userId}:webSessions`);
   }
 }
 
