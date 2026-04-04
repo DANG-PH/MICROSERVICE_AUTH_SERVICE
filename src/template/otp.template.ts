@@ -34,31 +34,33 @@ export function otpEmailTemplate(user: any, otp: string) {
 
         <div style="
           font-family: Arial, sans-serif;
-          background: ${theme.background} !important;
-          color: #f8fafc !important;
-          padding: 20px;
-          border-radius: 12px;
-          max-width: 450px;
+          background: #111827 !important;
+          color: #e0e7ff !important;
+          padding: 24px;
+          border-radius: 14px;
+          max-width: 500px;
           margin: auto;
           border: 2px solid ${theme.color} !important;
+          box-shadow: 0 0 14px ${theme.color}66;
         ">
-          <div style="text-align: center; margin-bottom: 12px;">
+        <div style="text-align: center; margin-bottom: 16px;">
             <img src="${theme.image}"
-              alt="Ngọc Rồng Online Logo"
+              alt="Notification"
               style="
-                width: 120px;
-                height: 120px;
+                width: 110px;
+                height: 110px;
                 object-fit: cover;
                 border-radius: 50%;
                 border: 2px solid ${theme.color};
-              " />
+              "
+            />
           </div>
 
-          <h2 style="text-align:center; margin-bottom: 12px; color: ${theme.color} !important;">
+          <h2 style="text-align:center; margin-bottom: 14px; color: ${theme.color} !important;">
             NGỌC RỒNG ONLINE
           </h2>
 
-          <p style="font-size:14px; line-height:1.5; color:#f8fafc !important;">
+          <p style="font-size:14px; line-height:1.6; color:#c7d2fe !important;">
             Xin chào 
             ${user.realname}
             <span style="font-size:12px; opacity:0.9;">(${user.username})</span>,
@@ -84,7 +86,7 @@ export function otpEmailTemplate(user: any, otp: string) {
             </span>
           </div>
 
-          <p style="font-size:14px; color: #f8fafc !important;">
+          <p style="font-size:14px; color: #e0e7ff !important;">
             Mã OTP có hiệu lực trong <b>5 phút</b>.<br/>
             Không cung cấp mã cho bất kỳ ai để tránh mất tài khoản.
           </p>
