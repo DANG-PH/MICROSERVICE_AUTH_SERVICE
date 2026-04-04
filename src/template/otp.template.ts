@@ -9,7 +9,7 @@ export function otpEmailTemplate(user: any, otp: string) {
     {
       color: "#10b981",
       background: "#052e16",
-      inner: "#14532d",
+      inner: "#0d2b1a",
       image: "https://avatars.pfptown.com/775/broly-pfp-2999.png",
     },
     {
@@ -21,7 +21,7 @@ export function otpEmailTemplate(user: any, otp: string) {
     {
       color: "#8b5cf6",
       background: "#1e1b4b",
-      inner: "#2e1065",
+      inner: "#1a1040",
       image: "https://tse4.mm.bing.net/th/id/OIP.XD4kmrI2fwETPDDVcZB48gHaHa?pid=Api&P=0&h=220",
     },
   ];
