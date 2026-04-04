@@ -86,7 +86,7 @@ export function otpEmailTemplate(user: any, otp: string) {
             </span>
           </div>
 
-          <p style="font-size:14px; color: #e0e7ff !important;">
+          <p style="font-size:14px; color: #c7d2fe !important;">
             Mã OTP có hiệu lực trong <b>5 phút</b>.<br/>
             Không cung cấp mã cho bất kỳ ai để tránh mất tài khoản.
           </p>
