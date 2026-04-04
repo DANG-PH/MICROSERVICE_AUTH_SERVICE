@@ -1,32 +1,60 @@
 export function otpEmailTemplate(user: any, otp: string) {
+  const themes = [
+    {
+      color: "#38bdf8",
+      background: "#0f172a",
+      inner: "#1e293b",
+      image: "https://tse4.mm.bing.net/th/id/OIP.JKPW3eDbQGaQFhdpZfk12wHaHa?pid=Api&P=0&h=220",
+    },
+    {
+      color: "#10b981",
+      background: "#052e16",
+      inner: "#14532d",
+      image: "https://avatars.pfptown.com/775/broly-pfp-2999.png",
+    },
+    {
+      color: "#f59e0b",
+      background: "#1c1108",
+      inner: "#292001",
+      image: "https://i.redd.it/tnpjnvyab2z31.png",
+    },
+    {
+      color: "#8b5cf6",
+      background: "#1e1b4b",
+      inner: "#2e1065",
+      image: "https://tse4.mm.bing.net/th/id/OIP.XD4kmrI2fwETPDDVcZB48gHaHa?pid=Api&P=0&h=220",
+    },
+  ];
+
+  const theme = themes[Math.floor(Math.random() * themes.length)];
+
   return `
         <meta name="color-scheme" content="light dark">
         <meta name="supported-color-schemes" content="light dark">
 
         <div style="
           font-family: Arial, sans-serif;
-          background: #0f172a !important;
+          background: ${theme.background} !important;
           color: #f8fafc !important;
           padding: 20px;
           border-radius: 12px;
           max-width: 450px;
           margin: auto;
-          border: 2px solid #38bdf8 !important;
+          border: 2px solid ${theme.color} !important;
         ">
           <div style="text-align: center; margin-bottom: 12px;">
-            <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+            <img src="${theme.image}"
               alt="Ngọc Rồng Online Logo"
               style="
                 width: 120px;
                 height: 120px;
                 object-fit: cover;
                 border-radius: 50%;
-                border: 2px solid #38bdf8;
-                box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+                border: 2px solid ${theme.color};
               " />
           </div>
 
-          <h2 style="text-align:center; margin-bottom: 12px; color: #38bdf8 !important;">
+          <h2 style="text-align:center; margin-bottom: 12px; color: ${theme.color} !important;">
             NGỌC RỒNG ONLINE
           </h2>
 
@@ -41,15 +69,15 @@ export function otpEmailTemplate(user: any, otp: string) {
           <div style="
             margin: 20px auto;
             padding: 12px 0;
-            background: #1e293b !important;
+            background: ${theme.inner} !important;
             border-radius: 10px;
             text-align:center;
-            border: 1px solid #38bdf8 !important;
+            border: 1px solid ${theme.color} !important;
           ">
             <span style="
               font-size: 28px;
               font-weight: bold;
-              color: #38bdf8 !important;
+              color: ${theme.color} !important;
               font-family: 'Courier New', monospace;
             ">
               ${otp}
@@ -88,7 +116,7 @@ export function securityAlertEmailTemplate(realname: string, username: string) {
       border: 2px solid #fb7185 !important;
     ">
       <div style="text-align: center; margin-bottom: 12px;">
-        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+        <img src="https://tse4.mm.bing.net/th/id/OIP.JKPW3eDbQGaQFhdpZfk12wHaHa?pid=Api&P=0&h=220"
           alt="Security Alert"
           style="
             width: 120px;
@@ -157,7 +185,7 @@ export function resetPasswordEmailTemplate(user: any): string {
       border: 2px solid #f97316;
     ">
       <div style="text-align:center; margin-bottom:12px;">
-        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+        <img src="https://tse4.mm.bing.net/th/id/OIP.JKPW3eDbQGaQFhdpZfk12wHaHa?pid=Api&P=0&h=220"
              alt="Ngọc Rồng Online Logo"
              style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:2px solid #f97316;box-shadow:0 0 10px rgba(249,115,22,0.3);" />
       </div>
@@ -201,7 +229,7 @@ export function changeEmailConfirmationTemplate(user: any, newEmail: string): st
       border: 2px solid #38bdf8;
     ">
       <div style="text-align:center; margin-bottom:12px;">
-        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+        <img src="https://tse4.mm.bing.net/th/id/OIP.JKPW3eDbQGaQFhdpZfk12wHaHa?pid=Api&P=0&h=220"
              alt="Ngọc Rồng Online Logo"
              style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:2px solid #38bdf8;box-shadow:0 0 10px rgba(56,189,248,0.3);" />
       </div>
@@ -241,10 +269,10 @@ export function otpResetPassTemplate(realname: string, username: string, otp: st
       border-radius: 12px;
       max-width: 450px;
       margin: auto;
-      border: 2px solid #3c4447ff;
+      border: 2px solid #38bdf8;
     ">
       <div style="text-align:center; margin-bottom:12px;">
-        <img src="https://i.postimg.cc/vHgpK4JX/avt9.webp"
+        <img src="https://tse4.mm.bing.net/th/id/OIP.JKPW3eDbQGaQFhdpZfk12wHaHa?pid=Api&P=0&h=220"
              alt="Ngọc Rồng Online Logo"
              style="width:120px;height:120px;object-fit:cover;border-radius:50%;border:2px solid #38bdf8;box-shadow:0 0 10px rgba(56,189,248,0.3);" />
       </div>
@@ -312,7 +340,12 @@ export function ManagerEmailTemplate(
   let image = '';
 
   // Nếu title là cảnh báo -> bắt buộc đỏ và ảnh cảnh báo
-  if (title.toLowerCase().includes("cảnh báo") || title.toLowerCase().includes("ban") || title.toLowerCase().includes("bảo mật")) {
+  if (title.toLowerCase().includes("cảnh báo") || 
+      title.toLowerCase().includes("banned") ||
+      title.toLowerCase().includes("cấm") ||
+      title.toLowerCase().includes("khóa tài khoản") || 
+      title.toLowerCase().includes("bảo mật")) 
+  {
     color = "#ef4444"; // đỏ
     image = "https://avatarfiles.alphacoders.com/857/85715.png";
   }
@@ -327,11 +360,11 @@ export function ManagerEmailTemplate(
   }
 
   if (color === "#8b5cf6") {
-    image = "https://pfptown.com/download/pfptown/1690212148/goku-black-pfp-2408.png";
+    image = "https://tse4.mm.bing.net/th/id/OIP.XD4kmrI2fwETPDDVcZB48gHaHa?pid=Api&P=0&h=220";
   }
 
   if (color === "#3b82f6") {
-    image = "https://i.postimg.cc/vHgpK4JX/avt9.webp";
+    image = "https://tse4.mm.bing.net/th/id/OIP.JKPW3eDbQGaQFhdpZfk12wHaHa?pid=Api&P=0&h=220";
   }
 
   return `
