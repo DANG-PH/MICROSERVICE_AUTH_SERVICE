@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -162,6 +162,7 @@ export class AuthService {
       username: user.username,
       role: user.role,
       platform,
+      tokenVersion: user.tokenVersion,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -192,7 +193,7 @@ export class AuthService {
       }
 
       const newAccessToken = this.jwtService.sign(
-        { userId: user.id, username, role: user.role, platform },
+        { userId: user.id, username, role: user.role, platform, tokenVersion: user.tokenVersion, },
         { expiresIn: '1d' }
       );
 
@@ -225,6 +226,7 @@ export class AuthService {
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(data.newPassword, salt);
     await this.saveUser(user);
+    await this.setTokenVersion(user.id);
     return { success: true };
   }
 
@@ -260,6 +262,7 @@ export class AuthService {
 
     await this.saveUser(user);
     await this.cacheManager.del(`RESET_OTP:${user.username}`);
+    await this.setTokenVersion(user.id);
 
     this.mailerService.sendMail({
       to: user.email,
@@ -342,10 +345,10 @@ export class AuthService {
     const userBalance = Number(payResp.pay?.tien) || 0;
 
     if (50000 > userBalance) {
-      throw new RpcException({ status: status.FAILED_PRECONDITION, message: 'Số dư không đủ để nâng role Partner' });
+      throw new RpcException({ code: status.FAILED_PRECONDITION, message: 'Số dư không đủ để nâng role Partner' });
     }
     
-    if (user.role !== "USER") throw new RpcException({ status: status.ALREADY_EXISTS, message: 'Bạn đã có role đặc biệt' });
+    if (user.role !== "USER") throw new RpcException({ code: status.ALREADY_EXISTS, message: 'Bạn đã có role đặc biệt' });
     user.role = "PARTNER"
     await this.userRepository.save(user);
   
@@ -369,6 +372,24 @@ export class AuthService {
       role: user.role,
       avatarUrl: user.avatarUrl
     };
+  }
+
+  async getTokenVersion(data: GetTokenVersionRequest): Promise<GetTokenVersionResponse> {
+    const user = await this.userRepository.findOne({ where: { id: data.userId } })
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    return {
+      tokenVersion: user.tokenVersion
+    };
+  }
+
+  async setTokenVersion(userId: number): Promise<boolean> {
+    const user = await this.userRepository.findOne({ where: { id: userId } })
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+    user.tokenVersion++;
+    await this.userRepository.save(user);
+    await this.cacheManager.set(`TOKEN_VER:${userId}`, user.tokenVersion, 10 * 60 * 1000);
+    return true;
   }
 
   async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {
@@ -505,6 +526,7 @@ export class AuthService {
       username: user.username,
       role: user.role,   
       platform,
+      tokenVersion: user.tokenVersion,
     };
 
     const accessToken = this.jwtService.sign(payload, {

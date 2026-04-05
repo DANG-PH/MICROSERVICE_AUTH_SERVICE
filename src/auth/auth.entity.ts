@@ -20,6 +20,9 @@ export class AuthEntity {
   @Column({ default: 'USER' })
   role: string;
 
+  @Column({ default: 0 })
+  tokenVersion: number;
+
   @Column({ nullable: true })
   password: string;
 
