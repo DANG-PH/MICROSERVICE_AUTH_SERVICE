@@ -370,7 +370,8 @@ export class AuthService {
     return { 
       biBan: user.biBan,
       role: user.role,
-      avatarUrl: user.avatarUrl
+      avatarUrl: user.avatarUrl,
+      username: user.username
     };
   }
 
