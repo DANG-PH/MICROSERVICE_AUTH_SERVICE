@@ -324,7 +324,7 @@ export class AuthService {
 
     user.biBan = true;
     await this.saveUser(user);
-    return { success: true };
+    return { success: true, userId: user.id };
   }
 
   async unbanUser(data: UnbanUserRequest): Promise<UnbanUserResponse> {
