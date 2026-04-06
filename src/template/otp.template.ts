@@ -6,24 +6,24 @@ export function otpEmailTemplate(user: any, otp: string) {
       inner: "#1e293b",
       image: "https://tse4.mm.bing.net/th/id/OIP.JKPW3eDbQGaQFhdpZfk12wHaHa?pid=Api&P=0&h=220",
     },
-    {
-      color: "#10b981",
-      background: "#052e16",
-      inner: "#0d2b1a",
-      image: "https://avatars.pfptown.com/775/broly-pfp-2999.png",
-    },
+    // {
+    //   color: "#10b981",
+    //   background: "#052e16",
+    //   inner: "#0d2b1a",
+    //   image: "https://avatars.pfptown.com/775/broly-pfp-2999.png",
+    // },
     {
       color: "#f59e0b",
       background: "#1c1108",
       inner: "#292001",
       image: "https://i.redd.it/tnpjnvyab2z31.png",
     },
-    {
-      color: "#8b5cf6",
-      background: "#1e1b4b",
-      inner: "#1a1040",
-      image: "https://tse4.mm.bing.net/th/id/OIP.XD4kmrI2fwETPDDVcZB48gHaHa?pid=Api&P=0&h=220",
-    },
+    // {
+    //   color: "#8b5cf6",
+    //   background: "#1e1b4b",
+    //   inner: "#1a1040",
+    //   image: "https://tse4.mm.bing.net/th/id/OIP.XD4kmrI2fwETPDDVcZB48gHaHa?pid=Api&P=0&h=220",
+    // },
   ];
 
   const theme = themes[Math.floor(Math.random() * themes.length)];
