@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -380,6 +380,15 @@ export class AuthService {
 
     return {
       tokenVersion: user.tokenVersion
+    };
+  }
+
+  async getBan(data: GetBanRequest): Promise<GetBanResponse> {
+    const user = await this.userRepository.findOne({ where: { id: data.userId } })
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    return {
+      success: !user.biBan
     };
   }
 
