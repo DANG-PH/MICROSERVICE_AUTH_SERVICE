@@ -1,7 +1,7 @@
 import { Controller, InternalServerErrorException, ForbiddenException, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import type { GetProfileReponse, GetProfileRequest, GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse,RequestResetPasswordRequest, RequestResetPasswordResponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse } from 'proto/auth.pb';
+import type { GetProfileReponse, GetProfileRequest, GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse,RequestResetPasswordRequest, RequestResetPasswordResponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse } from 'proto/auth.pb';
 import { AUTH_SERVICE_NAME } from 'proto/auth.pb';
 import { Metadata } from '@grpc/grpc-js';
 
@@ -48,6 +48,11 @@ export class AuthController {
   async changePassword(data: ChangePasswordRequest, metadata: Metadata): Promise<ChangePasswordResponse> {
     const platform = metadata.get('platform')[0] as string;
     return await this.authService.changePassword(data, platform);
+  }
+
+  @GrpcMethod(AUTH_SERVICE_NAME, 'SystemChangePassword')
+  async systemChangePassword(data: SystemChangePasswordRequest): Promise<SystemChangePasswordResponse> {
+    return await this.authService.systemChangePassword(data);
   }
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'ResetPassword')
