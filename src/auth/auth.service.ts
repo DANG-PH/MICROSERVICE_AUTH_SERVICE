@@ -26,7 +26,6 @@ import Redis from 'ioredis';
 @Injectable()
 export class AuthService {
   private client: OAuth2Client;
-  private redis: Redis;
   constructor(
     @InjectRepository(AuthEntity)
     private readonly userRepository: Repository<AuthEntity>,
@@ -35,9 +34,9 @@ export class AuthService {
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     @Inject(String(process.env.RABBIT_SERVICE)) private readonly emailClient: ClientProxy,
     private readonly payService: PayService,
+    @Inject('REDIS_CLIENT') private readonly redis: Redis,
   ) {
       this.client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-      this.redis = new Redis(process.env.REDIS_URL || '')
   }
 
   async saveUser(user: AuthEntity): Promise<AuthEntity> {
