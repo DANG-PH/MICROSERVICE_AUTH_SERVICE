@@ -477,7 +477,7 @@ export class AuthService {
   }
 
   async loginWithGoogle(data: LoginWithGoogleRequest, platform: string): Promise<LoginWithGoogleResponse> {
-    const dataToken = await this.verifyGoogleToken(data.tokenFromGoogle);
+    const dataToken = await this.verifyGoogleToken(data.tokenFromGoogle, platform);
     if (!dataToken) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Token không hợp lệ'});
 
     if (!dataToken.email_verified) {
@@ -575,11 +575,12 @@ export class AuthService {
     return attempts;
   }
 
-  async verifyGoogleToken(idToken: string): Promise<TokenPayload> {
+  async verifyGoogleToken(idToken: string, platform: string): Promise<TokenPayload> {
     try {
+      let idCheck = platform == "game" ? process.env.GOOGLE_GAME_CLIENT_ID : process.env.GOOGLE_CLIENT_ID;
       const ticket = await this.client.verifyIdToken({
         idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
+        audience: idCheck,
       });
 
       const payload = ticket.getPayload();
