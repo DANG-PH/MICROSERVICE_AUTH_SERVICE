@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse, SetTokenVersionResponse, SetTokenVersionRequest, GetEmailUserByUsernameRequest, GetEmailUserByUsernameResponse } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -374,6 +374,13 @@ export class AuthService {
     return { email: user.email };
   }
 
+  async getEmailUserByUsername(data: GetEmailUserByUsernameRequest): Promise<GetEmailUserByUsernameResponse> {
+    const user = await this.userRepository.findOne({ where: { username: data.username } })
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+
+    return { email: user.email };
+  }
+
   async getProfile(data: GetProfileRequest): Promise<GetProfileReponse> {
     const user = await this.userRepository.findOne({ where: { id: data.id } })
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
@@ -404,13 +411,28 @@ export class AuthService {
     };
   }
 
-  async setTokenVersion(userId: number): Promise<boolean> {
+  async setTokenVersion(userId: number): Promise<SetTokenVersionResponse> {
     const user = await this.userRepository.findOne({ where: { id: userId } })
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
     user.tokenVersion++;
     await this.userRepository.save(user);
     await this.cacheManager.set(`TOKEN_VER:${userId}`, user.tokenVersion, 10 * 60 * 1000);
-    return true;
+    // Sau này cần update gọi kick user ở bên api gateway ( dùng event driven )
+    return {
+      success: true
+    };
+  }
+
+  async setTokenVersionByUsername(data: SetTokenVersionRequest): Promise<SetTokenVersionResponse> {
+    const user = await this.userRepository.findOne({ where: { username: data.username } })
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+    user.tokenVersion++;
+    await this.userRepository.save(user);
+    await this.cacheManager.set(`TOKEN_VER:${user.id}`, user.tokenVersion, 10 * 60 * 1000);
+    // Sau này cần update gọi kick user ở bên api gateway ( dùng event driven )
+    return {
+      success: true
+    };
   }
 
   async sendEmailToUser(data: SendEmailToUserRequest): Promise<SendemailToUserResponse> {

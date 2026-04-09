@@ -1,7 +1,7 @@
 import { Controller, InternalServerErrorException, ForbiddenException, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
 import { AuthService } from './auth.service';
-import type { GetProfileReponse, GetProfileRequest, GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse,RequestResetPasswordRequest, RequestResetPasswordResponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse } from 'proto/auth.pb';
+import type { GetProfileReponse, GetProfileRequest, GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse,RequestResetPasswordRequest, RequestResetPasswordResponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, SetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SetTokenVersionResponse, SystemChangePasswordResponse, GetTokenVersionRequest, GetEmailUserByUsernameRequest, GetEmailUserByUsernameResponse } from 'proto/auth.pb';
 import { AUTH_SERVICE_NAME } from 'proto/auth.pb';
 import { Metadata } from '@grpc/grpc-js';
 
@@ -92,6 +92,13 @@ export class AuthController {
     return this.authService.getTokenVersion(data);
   }
 
+  @GrpcMethod(AUTH_SERVICE_NAME, 'SetTokenVersion')
+  async SetTokenVersion(
+    data: SetTokenVersionRequest
+  ): Promise<SetTokenVersionResponse> {
+    return this.authService.setTokenVersionByUsername(data);
+  }
+
   @GrpcMethod(AUTH_SERVICE_NAME, 'GetBan')
   async GetBan(
     data: GetBanRequest
@@ -137,6 +144,11 @@ export class AuthController {
   @GrpcMethod(AUTH_SERVICE_NAME, 'GetEmailUser')
   async getEmailUser(data: GetEmailUserRequest): Promise<GetEmailUserResponse> {
     return await this.authService.getEmailUser(data);
+  }
+
+  @GrpcMethod(AUTH_SERVICE_NAME, 'GetEmailUserByUsername')
+  async getEmailUserByUsername(data: GetEmailUserByUsernameRequest): Promise<GetEmailUserByUsernameResponse> {
+    return await this.authService.getEmailUserByUsername(data);
   }
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'CheckAccount')
