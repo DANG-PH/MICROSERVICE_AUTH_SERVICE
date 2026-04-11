@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
-import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse, SetTokenVersionResponse, SetTokenVersionRequest, GetEmailUserByUsernameRequest, GetEmailUserByUsernameResponse } from 'proto/auth.pb';
+import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse, SetTokenVersionResponse, SetTokenVersionRequest, GetEmailUserByUsernameRequest, GetEmailUserByUsernameResponse, LogoutRequest } from 'proto/auth.pb';
 import { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import { MailerService } from '@nestjs-modules/mailer';
@@ -168,7 +168,7 @@ export class AuthService {
       expiresIn: '1d',
     });
     const refreshToken = this.jwtService.sign(
-      { username: user.username },
+      { username: user.username, jti: randomUUID() },
       { expiresIn: '7d' },
     );
 
@@ -180,9 +180,60 @@ export class AuthService {
     };
   }
 
+  async logout(data: LogoutRequest) {
+    // Trade-off ở đây
+    // Nếu dùng access jti thì mỗi lần guard lại cần check
+    // Tối ưu latency > consistency thì cần dùng refreshToken
+    // Mỗi khi gọi refreshToken thì check jti có trong black list không là ok
+    const decoded = this.jwtService.verify(data.refreshToken);
+
+    const now = Math.floor(Date.now() / 1000);
+    const ttl = decoded.exp - now;
+
+    const jti = decoded.jti;
+    await this.redis.set(
+      `blacklist:refresh:${jti}`,
+      '1',
+      'EX',
+      ttl > 0 ? ttl : 0
+    );
+  }
+
   async refresh(refreshToken: string, platform: string): Promise<{ access_token: string, refresh_token: string }> {
     try {
+      const refreshLua = `
+        local key = KEYS[1]
+        local ttl = tonumber(ARGV[1])
+
+        if ttl == nil or ttl <= 0 then
+          return 0
+        end
+
+        if redis.call("EXISTS", KEYS[1]) == 1 then
+          return 0
+        end
+
+        redis.call("SET", KEYS[1], "1", "EX", ttl)
+        return 1
+      `;
+
       const decoded = this.jwtService.verify(refreshToken);
+
+      const key = `blacklist:refresh:${decoded.jti}`;
+
+      const now = Math.floor(Date.now() / 1000);
+      const ttl = Math.max(decoded.exp - now, 0);
+
+      const result = await this.redis.eval(
+        refreshLua,
+        1,
+        key,
+        ttl > 0 ? ttl : 0
+      );
+
+      if (result === 0) {
+        throw new UnauthorizedException('Token reused or revoked');
+      }
 
       const username = decoded.username;
 
@@ -197,7 +248,7 @@ export class AuthService {
       );
 
       const newRefreshToken = this.jwtService.sign(
-        { username }, 
+        { username, jti: randomUUID() }, 
         { expiresIn: '7d' }
       );
 
@@ -576,7 +627,7 @@ export class AuthService {
       expiresIn: '1d',
     });
     const refreshToken = this.jwtService.sign(
-      { username: user.username },
+      { username: user.username, jti: randomUUID() },
       { expiresIn: '7d' },
     );
 
