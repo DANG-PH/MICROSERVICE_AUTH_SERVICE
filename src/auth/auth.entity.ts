@@ -5,7 +5,7 @@ export class AuthEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ nullable: false, unique: true })
+  @Column({ nullable: false, unique: true }) // Unique Indexing
   username: string;
 
   @Column({ nullable: false })
