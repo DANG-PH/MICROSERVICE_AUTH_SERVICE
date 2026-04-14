@@ -33,6 +33,7 @@ export class AuthService {
     private mailerService: MailerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     @Inject(String(process.env.RABBIT_SERVICE)) private readonly emailClient: ClientProxy,
+    @Inject(String(process.env.RABBIT_USER_SERVICE)) private readonly userClient: ClientProxy,
     private readonly payService: PayService,
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
   ) {
@@ -365,6 +366,18 @@ export class AuthService {
 
     user.avatarUrl = data.avatarUrl;
     await this.saveUser(user);
+
+    // Event driven qua user để sync avatar
+    // Thay vì dùng gRPC gọi thì chỗ này dùng event pub/sub để giảm latency
+    // Eventual consistency cho avatar là hợp lý
+    // Vì sao cần sync?
+    // Vì avatarUrl xuất hiện ở 2 DB, user service cũng cần avatarUrl để trả về client với top bxh,...
+    // Nếu mỗi lần đều gọi sang Auth để check thì giảm performance và có nguy cơ trở thành bottleneck
+    // Nên ta chấp nhận duplicate data và eventual consistency sync sau để tăng performance và giảm latency
+    this.userClient.emit('UserProfileUpdated', {
+      userId: user.id,
+      avatarUrl: user.avatarUrl,
+    });
 
     return { success: true };
   }
