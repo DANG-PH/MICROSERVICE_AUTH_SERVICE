@@ -22,6 +22,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { TokenPayload } from 'google-auth-library';
 import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
+import { IdempotencyKey } from './idempotency.entity';
 
 @Injectable()
 export class AuthService {
@@ -29,6 +30,8 @@ export class AuthService {
   constructor(
     @InjectRepository(AuthEntity)
     private readonly userRepository: Repository<AuthEntity>,
+    @InjectRepository(IdempotencyKey)
+    private readonly idempotencyRepository: Repository<IdempotencyKey>,
     private jwtService: JwtService,
     private mailerService: MailerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
@@ -281,16 +284,119 @@ export class AuthService {
     return { success: true };
   }
 
-  async systemChangePassword(data: SystemChangePasswordRequest): Promise<SystemChangePasswordResponse> {
-    const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
-    const user = await this.findByUsername(username);
-    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+  async systemChangePassword(
+    data: SystemChangePasswordRequest,
+  ): Promise<SystemChangePasswordResponse> {
+    const key = data.idempotencyKey;
 
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(data.newPassword, salt);
-    await this.saveUser(user);
-    await this.setTokenVersion(user.id);
-    return { success: true };
+    if (!key) {
+      throw new RpcException({
+        code: status.INVALID_ARGUMENT,
+        message: 'Thiếu idempotency key',
+      });
+    }
+
+    return await this.userRepository.manager.transaction(
+      'READ COMMITTED',
+      async (manager) => {
+        /**
+         * STEP 1: claim key trước
+         * request duplicate sẽ đụng unique key
+         */
+        try {
+          await manager.insert(IdempotencyKey, {
+            key,
+            response: null,
+            created_at: new Date(),
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          });
+        } catch (err) {
+          // duplicate key -> request khác đã claim rồi
+        }
+
+        /**
+         * STEP 2: lock row idempotency
+         * request cùng key khác sẽ phải chờ
+         */
+        const idem = await manager.findOne(IdempotencyKey, {
+          where: { key },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!idem) {
+          throw new RpcException({
+            code: status.INTERNAL,
+            message: 'Không tìm thấy idempotency key',
+          });
+        }
+
+        /**
+         * STEP 3: nếu đã xử lý xong thì trả cache response
+         */
+        if (idem.response) {
+          return idem.response as SystemChangePasswordResponse;
+        }
+
+        /**
+         * STEP 4: decode session
+         */
+        const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
+
+        /**
+         * STEP 5: lock user row
+         */
+        const user = await manager.findOne(AuthEntity, {
+          where: { username },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!user) {
+          throw new RpcException({
+            code: status.NOT_FOUND,
+            message: 'User not found',
+          });
+        }
+
+        /**
+         * OPTIONAL:
+         * nếu password mới giống password cũ thì return luôn
+         */
+        const samePassword = await bcrypt.compare(
+          data.newPassword,
+          user.password,
+        );
+
+        if (!samePassword) {
+          /**
+           * STEP 6: đổi password
+           */
+          const salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(data.newPassword, salt);
+
+          await manager.save(AuthEntity, user);
+
+          /**
+           * STEP 7: revoke token
+           */
+          await this.setTokenVersion(user.id);
+        }
+
+        /**
+         * STEP 8: response
+         */
+        const response: SystemChangePasswordResponse = {
+          success: true,
+        };
+
+        /**
+         * STEP 9: cache response
+         */
+        idem.response = response;
+        await manager.save(IdempotencyKey, idem);
+
+        return response;
+      },
+    );
   }
 
   async requestResetPassword(data: RequestResetPasswordRequest): Promise<RequestResetPasswordResponse> {
@@ -336,28 +442,93 @@ export class AuthService {
     return { success: true };
   }
 
-  async changeEmail(data: ChangeEmailRequest): Promise<ChangeEmailResponse> {
-    const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
-    const user = await this.findByUsername(username);
-    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+  async changeEmail(
+    data: ChangeEmailRequest,
+  ): Promise<ChangeEmailResponse> {
+    const key = data.idempotencyKey;
 
-    user.email = data.newEmail;
-    await this.saveUser(user);
+    if (!key) {
+      throw new RpcException({
+        code: status.INVALID_ARGUMENT,
+        message: 'Thiếu idempotency key',
+      });
+    }
 
-    // Optional: send email xác nhận
+    return await this.userRepository.manager.transaction(
+      'READ COMMITTED',
+      async (manager) => {
+        /**
+         * STEP 1: claim key
+         */
+        try {
+          await manager.insert(IdempotencyKey, {
+            key,
+            response: null,
+            created_at: new Date(),
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          });
+        } catch (err) {
+          // duplicate key -> request khác đã tạo trước
+        }
 
-    // this.emailClient.emit('send_email', {
-    //   to: user.email,
-    //   subject: 'Email đã được cập nhật',
-    //   html: changeEmailConfirmationTemplate(user, data.newEmail),
-    // });
+        const idem = await manager.findOne(IdempotencyKey, {
+          where: { key },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-    this.mailerService.sendMail({
-      to: user.email,
-      subject: 'Email đã được cập nhật',
-      html: changeEmailConfirmationTemplate(user, data.newEmail),
-    });
-    return { success: true };
+        if (!idem) {
+          throw new RpcException({
+            code: status.INTERNAL,
+            message: 'Không tìm thấy idempotency key',
+          });
+        }
+
+        if (idem.response) {
+          return idem.response as ChangeEmailResponse;
+        }
+
+        const username = Buffer.from(data.sessionId,'base64',).toString('ascii');
+
+        const user = await manager.findOne(AuthEntity, {
+          where: { username },
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!user) {
+          throw new RpcException({
+            code: status.NOT_FOUND,
+            message: 'User not found',
+          });
+        }
+
+        user.email = data.newEmail;
+        await manager.save(AuthEntity, user);
+
+        const response: ChangeEmailResponse = {
+          success: true,
+        };
+
+        idem.response = response;
+        await manager.save(IdempotencyKey, idem);
+
+        setImmediate(async () => {
+          try {
+            await this.mailerService.sendMail({
+              to: data.newEmail,
+              subject: 'Email đã được cập nhật',
+              html: changeEmailConfirmationTemplate(
+                user,
+                data.newEmail,
+              ),
+            });
+          } catch (err) {
+            console.error('Send mail failed:', err);
+          }
+        });
+
+        return response;
+      },
+    );
   }
 
   async changeAvatar(data: ChangeAvatarRequest): Promise<ChangeAvatarResponse> {
@@ -427,7 +598,7 @@ export class AuthService {
     user.role = "PARTNER"
     await this.userRepository.save(user);
   
-    await this.payService.updateMoney({userId: user.id, amount: -50000})
+    await this.payService.updateMoney({userId: user.id, amount: -50000, idempotencyKey: "CHANGE_ROLE: "+randomUUID()})
     return { success: true };
   }
 

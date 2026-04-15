@@ -8,6 +8,7 @@ import { MailerModule } from '@nestjs-modules/mailer';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { PayModule } from 'src/pay/pay.module';
+import { IdempotencyKey } from './idempotency.entity';
 
 @Module({
   imports: [
@@ -54,7 +55,7 @@ import { PayModule } from 'src/pay/pay.module';
       inject: [ConfigService],
     }),
 
-    TypeOrmModule.forFeature([AuthEntity]),
+    TypeOrmModule.forFeature([AuthEntity, IdempotencyKey]),
 
     JwtModule.registerAsync({
       useFactory: async (config: ConfigService) => ({
