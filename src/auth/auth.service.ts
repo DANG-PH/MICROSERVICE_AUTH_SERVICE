@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, EntityManager } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
 import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse, SetTokenVersionResponse, SetTokenVersionRequest, GetEmailUserByUsernameRequest, GetEmailUserByUsernameResponse, LogoutRequest } from 'proto/auth.pb';
@@ -646,11 +646,14 @@ export class AuthService {
     };
   }
 
-  async setTokenVersion(userId: number): Promise<SetTokenVersionResponse> {
+  async setTokenVersion(userId: number, manager?: EntityManager): Promise<SetTokenVersionResponse> {
     const user = await this.userRepository.findOne({ where: { id: userId } })
     if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+    const repo = manager
+                  ? manager.getRepository(AuthEntity)
+                  : this.userRepository;
     user.tokenVersion++;
-    await this.userRepository.save(user);
+    await repo.save(user);
     await this.cacheManager.set(`TOKEN_VER:${userId}`, user.tokenVersion, 10 * 60 * 1000);
     // Sau này cần update gọi kick user ở bên api gateway ( dùng event driven )
     return {
