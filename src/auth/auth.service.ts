@@ -378,7 +378,7 @@ export class AuthService {
           /**
            * STEP 7: revoke token
            */
-          await this.setTokenVersion(user.id);
+          await this.setTokenVersion(user.id, manager);
         }
 
         /**
