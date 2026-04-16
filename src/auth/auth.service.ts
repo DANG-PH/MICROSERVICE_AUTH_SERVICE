@@ -358,28 +358,17 @@ export class AuthService {
         }
 
         /**
-         * OPTIONAL:
-         * nếu password mới giống password cũ thì return luôn
+         * STEP 6: đổi password
          */
-        const samePassword = await bcrypt.compare(
-          data.newPassword,
-          user.password,
-        );
+        const salt = await bcrypt.genSalt(10);
+        user.password = await bcrypt.hash(data.newPassword, salt);
 
-        if (!samePassword) {
-          /**
-           * STEP 6: đổi password
-           */
-          const salt = await bcrypt.genSalt(10);
-          user.password = await bcrypt.hash(data.newPassword, salt);
+        await manager.save(AuthEntity, user);
 
-          await manager.save(AuthEntity, user);
-
-          /**
-           * STEP 7: revoke token
-           */
-          await this.setTokenVersion(user.id, manager);
-        }
+        /**
+         * STEP 7: revoke token
+         */
+        await this.setTokenVersion(user.id, manager);
 
         /**
          * STEP 8: response
