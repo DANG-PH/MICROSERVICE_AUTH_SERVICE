@@ -348,12 +348,8 @@ export class AuthService {
           idempotencyKey: data.idempotencyKey,
         });
 
-        /**
-         * STEP 5: lock user row
-         */
         const user = await manager.findOne(AuthEntity, {
           where: { username },
-          lock: { mode: 'pessimistic_write' },
         });
 
         if (!user) {
