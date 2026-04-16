@@ -342,12 +342,6 @@ export class AuthService {
          */
         const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
 
-        console.log('[systemChangePassword]', {
-          username,
-          newPassword: data.newPassword,
-          idempotencyKey: data.idempotencyKey,
-        });
-
         const user = await manager.findOne(AuthEntity, {
           where: { username },
         });
@@ -638,11 +632,11 @@ export class AuthService {
   }
 
   async setTokenVersion(userId: number, manager?: EntityManager): Promise<SetTokenVersionResponse> {
-    const user = await this.userRepository.findOne({ where: { id: userId } })
-    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
     const repo = manager
                   ? manager.getRepository(AuthEntity)
                   : this.userRepository;
+    const user = await repo.findOne({ where: { id: userId } })
+    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
     user.tokenVersion++;
     await repo.save(user);
     await this.cacheManager.set(`TOKEN_VER:${userId}`, user.tokenVersion, 10 * 60 * 1000);
