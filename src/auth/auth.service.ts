@@ -342,6 +342,12 @@ export class AuthService {
          */
         const username = Buffer.from(data.sessionId, 'base64').toString('ascii');
 
+        console.log('[systemChangePassword]', {
+          username,
+          newPassword: data.newPassword,
+          idempotencyKey: data.idempotencyKey,
+        });
+
         /**
          * STEP 5: lock user row
          */
