@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, EntityManager } from 'typeorm';
+import { Repository, In, EntityManager, LessThanOrEqual } from 'typeorm';
 import { AuthEntity } from './auth.entity';
 import * as bcrypt from 'bcrypt';
 import type {GetEmailUserRequest, GetEmailUserResponse, ChangeRolePartnerRequest, ChangeRolePartnerResponse, RequestResetPasswordRequest, RequestResetPasswordResponse, LoginRequest,LoginResponse, RegisterResponse, RegisterRequest, VerifyOtpRequest, VerifyOtpResponse, ChangeEmailRequest, ChangeEmailResponse, ChangePasswordRequest, ChangePasswordResponse, ChangeRoleRequest, ChangeRoleResponse, ResetPasswordRequest, ResetPasswordResponse, BanUserRequest, BanUserResponse, UnbanUserRequest, UnbanUserResponse, GetProfileRequest, GetProfileReponse, SendEmailToUserRequest, SendemailToUserResponse, ChangeAvatarRequest, ChangeAvatarResponse, GetRealnameAvatarRequest, GetRealnameAvatarResponse, GetAllUserRequest, GetAllUserResponse, LoginWithGoogleRequest, LoginWithGoogleResponse, GetTokenVersionRequest, GetTokenVersionResponse, GetBanRequest, GetBanResponse, SystemChangePasswordRequest, SystemChangePasswordResponse, SetTokenVersionResponse, SetTokenVersionRequest, GetEmailUserByUsernameRequest, GetEmailUserByUsernameResponse, LogoutRequest } from 'proto/auth.pb';
@@ -23,6 +23,10 @@ import { TokenPayload } from 'google-auth-library';
 import { randomUUID } from 'crypto';
 import Redis from 'ioredis';
 import { IdempotencyKey } from './idempotency.entity';
+import { RegisterOutbox } from './register-outbox.entity';
+import { RegisterPayload } from 'src/types/register.type';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { UserService } from 'src/user/user.service';
 
 @Injectable()
 export class AuthService {
@@ -32,6 +36,8 @@ export class AuthService {
     private readonly userRepository: Repository<AuthEntity>,
     @InjectRepository(IdempotencyKey)
     private readonly idempotencyRepository: Repository<IdempotencyKey>,
+    @InjectRepository(RegisterOutbox)
+    private readonly outboxRepo: Repository<RegisterOutbox>,
     private jwtService: JwtService,
     private mailerService: MailerService,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
@@ -39,6 +45,7 @@ export class AuthService {
     @Inject(String(process.env.RABBIT_USER_SERVICE)) private readonly userClient: ClientProxy,
     private readonly payService: PayService,
     @Inject('REDIS_CLIENT') private readonly redis: Redis,
+    private readonly userService: UserService,
   ) {
       this.client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
@@ -80,6 +87,157 @@ export class AuthService {
     await this.saveUser(userMoi);
 
     return { success: true, auth_id: userMoi.id };
+  }
+
+  async registerSaga(data: RegisterRequest): Promise<RegisterResponse> {
+    if (data.username.includes('@gmail.com'))
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'Username không thể là email' });
+
+    const exists = await this.userRepository.findOne({ where: { username: data.username } });
+    if (exists)
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'Đã tồn tại User' });
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(data.password, salt);
+    let authId: number;
+
+    // ── 1 transaction: tạo auth + outbox ──────────────────────────────────────
+    // Không cần SagaState vì chỉ có đúng 1 compensating action duy nhất: xóa auth
+    // Dù crash ở bất kỳ đâu sau commit, cron chỉ cần biết authId là đủ để compensate
+    // SagaState chỉ cần thiết khi có nhiều bước, cần biết bước nào đã chạy để compensate đúng chỗ
+    await this.userRepository.manager.transaction(async (manager) => {
+      const auth = manager.create(AuthEntity, {
+        username: data.username,
+        password: passwordHash,
+        email: data.email,
+        realname: data.realname,
+        role: 'USER',
+        type: 0,
+        biBan: false,
+      });
+      await manager.save(auth);
+      authId = auth.id;
+
+      // Outbox ghi cùng transaction — đảm bảo không bao giờ mất event dù server crash
+      // Nếu commit thành công → chắc chắn có outbox để cron pick up
+      // Nếu crash trước commit → cả auth lẫn outbox đều rollback, không orphan record
+      const outbox = manager.create(RegisterOutbox, {
+        payload: { ...data, authId } as RegisterPayload,
+        status: 'PENDING',
+        nextRetryAt: new Date(),
+      });
+      await manager.save(outbox);
+    });
+
+    // ── Fast path: gọi user service ngay, đồng bộ ─────────────────────────────
+    // Client chờ đến khi user service tạo xong mới nhận response
+    // Cron chỉ là fallback khi server crash sau transaction commit nhưng trước khi fast path xong
+    try {
+      await this.callUserService(authId, data.gameName);
+      // Đánh DONE ngay để cron không pick up lại
+      await this.outboxRepo.update({ payload: { authId } as any }, { status: 'DONE' });
+    } catch (error) {
+      // Fast path fail → compensate xóa auth luôn
+      // Không cần đọc SagaState vì chỉ có đúng 1 việc cần undo: xóa auth vừa tạo
+      console.error(`[register] fast path fail → compensate authId: ${authId}`, error);
+      await this.userRepository.delete({ id: authId }).catch((e) =>
+        console.error(`[register] compensate deleteAuth failed authId: ${authId}`, e),
+      );
+      throw new RpcException({ code: status.INTERNAL, message: 'Đăng ký thất bại, vui lòng thử lại' });
+    }
+
+    return { success: true, auth_id: authId };
+  }
+
+  private async callUserService(authId: number, gameName: string): Promise<void> {
+    const result = await this.userService.handleRegister({ id: authId, gameName });
+    if (!result.success) throw new Error('User service trả về success: false');
+  }
+
+  // ─── CRON: Fallback khi server crash sau transaction commit ───────────────────
+  // Trường hợp này xác suất rất thấp nhưng vẫn phải handle
+  // Cron pick up outbox PENDING → thử gọi lại user service → compensate nếu hết retry
+
+  @Cron(CronExpression.EVERY_5_SECONDS)
+  async pollOutbox(): Promise<void> {
+    const events = await this.outboxRepo.find({
+      where: { status: 'PENDING', nextRetryAt: LessThanOrEqual(new Date()) },
+      order: { createdAt: 'ASC' },
+      take: 20,
+    });
+
+    for (const event of events) {
+      // Optimistic lock: tránh 2 instance cron pick up cùng 1 event khi scale ngang
+      const result = await this.outboxRepo.update(
+        { id: event.id, status: 'PENDING' },
+        { status: 'PROCESSING' },
+      );
+      if (result.affected === 0) continue;
+
+      await this.processOutboxEvent(event).catch((e) =>
+        console.error(`[cron] Unexpected error outbox ${event.id}`, e),
+      );
+    }
+  }
+
+  // ─── CRON: Recover stuck PROCESSING ──────────────────────────────────────────
+  // Khi server crash đúng lúc đang PROCESSING → status bị treo mãi ở PROCESSING
+  // Reset về PENDING để cron pick up lại sau 5 phút
+
+  @Cron('*/30 * * * * *')
+  async recoverStuckProcessing(): Promise<void> {
+    const stuckThreshold = new Date(Date.now() - 5 * 60_000);
+    await this.outboxRepo.update(
+      { status: 'PROCESSING', updatedAt: LessThanOrEqual(stuckThreshold) },
+      { status: 'PENDING' },
+    );
+  }
+
+  async processOutboxEvent(event: RegisterOutbox): Promise<void> {
+    const payload = event.payload as RegisterPayload;
+
+    // Auth còn tồn tại không? Nếu không → fast path đã compensate xóa rồi → bỏ qua
+    const authExists = await this.userRepository.findOne({ where: { id: payload.authId } });
+    if (!authExists) {
+      await this.outboxRepo.update(event.id, {
+        status: 'FAILED',
+        lastError: 'auth not found — đã compensate ở fast path',
+      });
+      return;
+    }
+
+    try {
+      await this.callUserService(payload.authId, payload.gameName);
+      await this.outboxRepo.update(event.id, { status: 'DONE' });
+    } catch (error) {
+      await this.handleFailure(event, error);
+    }
+  }
+
+  private async handleFailure(event: RegisterOutbox, error: unknown): Promise<void> {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const payload = event.payload as RegisterPayload;
+
+    if (event.retries < event.maxRetries) {
+      // Exponential backoff: 10s → 20s → 40s
+      const delayMs = Math.pow(2, event.retries) * 10_000;
+      await this.outboxRepo.update(event.id, {
+        status: 'PENDING',
+        retries: event.retries + 1,
+        nextRetryAt: new Date(Date.now() + delayMs),
+        lastError: errorMessage,
+      });
+      console.warn(`[register] retry ${event.retries + 1}/${event.maxRetries} outbox: ${event.id}`);
+    } else {
+      // Hết retry → compensate xóa auth
+      // Không cần SagaState vì compensating action duy nhất là xóa auth — không cần biết thêm gì
+      await this.userRepository.delete({ id: payload.authId }).catch((e) =>
+        console.error(`[register] DEAD LETTER compensate failed authId: ${payload.authId}`, e),
+      );
+      await this.outboxRepo.update(event.id, { status: 'FAILED', lastError: errorMessage });
+      console.error(`[register] DEAD LETTER authId: ${payload.authId}`, { errorMessage });
+      // TODO: alert Discord/Slack để admin biết
+    }
   }
 
   async login(data: LoginRequest, platform: string): Promise<LoginResponse> {
@@ -723,81 +881,35 @@ export class AuthService {
 
   async loginWithGoogle(data: LoginWithGoogleRequest, platform: string): Promise<LoginWithGoogleResponse> {
     const dataToken = await this.verifyGoogleToken(data.tokenFromGoogle, platform);
-    if (!dataToken) throw new RpcException({code: status.UNAUTHENTICATED ,message: 'Token không hợp lệ'});
+    if (!dataToken)
+      throw new RpcException({ code: status.UNAUTHENTICATED, message: 'Token không hợp lệ' });
 
-    if (!dataToken.email_verified) {
-      throw new RpcException({
-        code: status.PERMISSION_DENIED,
-        message: 'Email Google chưa được xác thực'
-      });
-    }
+    if (!dataToken.email_verified)
+      throw new RpcException({ code: status.PERMISSION_DENIED, message: 'Email Google chưa được xác thực' });
 
-    if (!dataToken.email || !dataToken.name || !dataToken.picture) {
-      throw new RpcException({
-        code: status.PERMISSION_DENIED,
-        message: 'Token thiếu trường dữ liệu, vui lòng đăng nhập lại!'
-      });
-    }
+    if (!dataToken.email || !dataToken.name || !dataToken.picture)
+      throw new RpcException({ code: status.PERMISSION_DENIED, message: 'Token thiếu trường dữ liệu, vui lòng đăng nhập lại!' });
 
     let user = await this.findByUsername(dataToken.email);
     let register = false;
+
     if (!user) {
       register = true;
-      const salt = await bcrypt.genSalt(10);
-      const passwordAccount = generateStrongPassword()
-      const passwordHash = await bcrypt.hash(passwordAccount, salt);
-
-      const userMoi = new AuthEntity();
-      userMoi.username = dataToken.email;
-      userMoi.password = passwordHash;
-      userMoi.email = dataToken.email;
-      userMoi.realname = dataToken.name;
-      userMoi.role = 'USER';
-      userMoi.type = 1;
-      userMoi.avatarUrl = dataToken.picture;
-      userMoi.biBan = false;
-
-      const userMoiTao = await this.saveUser(userMoi);
-      user = userMoiTao
-
-      const html = ManagerEmailTemplate(
-        `Chào mừng người chơi <br> ${user.realname}`,
-        `Chào mừng bạn đã đến với thế giới Ngọc rồng online (thông qua cách đăng ký với google)
-        <br>
-        Đây là tài khoản đăng nhập game của bạn:
-        <br>
-        <b>username</b>: ${user.username}
-        <br>
-        <b>password</b>: ${passwordAccount}
-        <br>
-        Vui lòng không chia sẻ thông tin trên cho bất kỳ ai
-        <br>
-        <i>Lưu ý: Bạn có thể đổi mật khẩu tại website của game, bạn có thể dùng tài khoản này hoặc login bằng google trên website</i>.
-        <br>
-        Xin cảm ơn!
-        `,
-        user.realname
-      );
-      this.mailerService.sendMail({
-        to: user.email,
-        subject: "[NRO]Chào mừng tân thủ",
-        html
-      });
+      user = await this.registerWithGoogle(dataToken); 
     }
 
-    if (user.biBan) throw new RpcException({code: status.PERMISSION_DENIED , message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin'});
+    if (user.biBan)
+      throw new RpcException({ code: status.PERMISSION_DENIED, message: 'Tài khoản đã bị khóa, vui lòng liên hệ Admin' });
 
     const payload = {
       userId: user.id,
       username: user.username,
-      role: user.role,   
+      role: user.role,
       platform,
       tokenVersion: user.tokenVersion,
     };
 
-    const accessToken = this.jwtService.sign(payload, {
-      expiresIn: '1d',
-    });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '1d' });
     const refreshToken = this.jwtService.sign(
       { username: user.username, jti: randomUUID() },
       { expiresIn: '7d' },
@@ -808,8 +920,84 @@ export class AuthService {
       refresh_token: refreshToken,
       auth_id: user.id,
       role: user.role,
-      register: register,
+      register,
     };
+  }
+
+  private async registerWithGoogle(dataToken: any): Promise<AuthEntity> {
+    const passwordAccount = generateStrongPassword();
+    const passwordHash = await bcrypt.hash(passwordAccount, await bcrypt.genSalt(10));
+    let authId: number;
+    let savedUser: AuthEntity;
+
+    // ── 1 transaction: auth + outbox ──────────────────────────────────────────
+    // Không cần SagaState vì chỉ có 1 compensating action: xóa auth
+    await this.userRepository.manager.transaction(async (manager) => {
+      const userMoi = manager.create(AuthEntity, {
+        username: dataToken.email,
+        password: passwordHash,
+        email: dataToken.email,
+        realname: dataToken.name,
+        role: 'USER',
+        type: 1,
+        avatarUrl: dataToken.picture,
+        biBan: false,
+      });
+      savedUser = await manager.save(userMoi);
+      authId = savedUser.id;
+
+      // Outbox ghi cùng transaction — đảm bảo không mất event dù crash
+      const outbox = manager.create(RegisterOutbox, {
+        payload: { authId, gameName: dataToken.name } as RegisterPayload,
+        status: 'PENDING',
+        nextRetryAt: new Date(),
+      });
+      await manager.save(outbox);
+    });
+
+    // Fast path: gọi user service ngay, đồng bộ
+    // Client cần vào game ngay sau login google → phải có user data
+    try {
+      await this.callUserService(authId, dataToken.name);
+      await this.outboxRepo.update(
+        { payload: { authId } as any, status: 'PENDING' },
+        { status: 'DONE' },
+      );
+    } catch (error) {
+      // Fail → compensate xóa auth, không cần SagaState vì chỉ có 1 việc cần undo
+      console.error(`[google-register] fast path fail → compensate authId: ${authId}`, error);
+      await this.userRepository.delete({ id: authId }).catch((e) =>
+        console.error(`[google-register] compensate failed authId: ${authId}`, e),
+      );
+      throw new RpcException({ code: status.INTERNAL, message: 'Đăng ký thất bại, vui lòng thử lại' });
+    }
+
+    // Email: fire and forget — không cần await, không block login
+    // Gửi được thì tốt, không gửi được cũng không ảnh hưởng flow
+    this.mailerService.sendMail({
+        to: savedUser.email,
+        subject: '[NRO]Chào mừng tân thủ',
+        html: ManagerEmailTemplate(
+          `Chào mừng người chơi <br> ${savedUser.realname}`,
+          `Chào mừng bạn đã đến với thế giới Ngọc rồng online (thông qua cách đăng ký với google)
+          <br>
+          Đây là tài khoản đăng nhập game của bạn:
+          <br>
+          <b>username</b>: ${savedUser.username}
+          <br>
+          <b>password</b>: ${passwordAccount}
+          <br>
+          Vui lòng không chia sẻ thông tin trên cho bất kỳ ai
+          <br>
+          <i>Lưu ý: Bạn có thể đổi mật khẩu tại website của game, bạn có thể dùng tài khoản này hoặc login bằng google trên website</i>.
+          <br>
+          Xin cảm ơn!
+          `,
+          savedUser.realname,
+        ),
+      }).catch((e) => console.warn(`[google-register] sendMail failed: ${savedUser.email}`, e));
+
+    return savedUser;
   }
 
   private async incrementLoginAttempt(username: string): Promise<number> {

@@ -13,7 +13,7 @@ export class AuthController {
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'Register')
   async register(data: RegisterRequest): Promise<RegisterResponse> {
-    return await this.authService.register(data);
+    return await this.authService.registerSaga(data);
   }
 
   @GrpcMethod(AUTH_SERVICE_NAME, 'Login')

@@ -9,6 +9,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { PayModule } from 'src/pay/pay.module';
 import { IdempotencyKey } from './idempotency.entity';
+import { RegisterOutbox } from './register-outbox.entity';
+import { UserModule } from 'src/user/user.module';
 
 @Module({
   imports: [
@@ -55,7 +57,7 @@ import { IdempotencyKey } from './idempotency.entity';
       inject: [ConfigService],
     }),
 
-    TypeOrmModule.forFeature([AuthEntity, IdempotencyKey]),
+    TypeOrmModule.forFeature([AuthEntity, IdempotencyKey, RegisterOutbox]),
 
     JwtModule.registerAsync({
       useFactory: async (config: ConfigService) => ({
@@ -63,7 +65,8 @@ import { IdempotencyKey } from './idempotency.entity';
       }),
       inject: [ConfigService],
     }),
-    PayModule
+    PayModule,
+    UserModule
   ],
   providers: [AuthService],
   exports: [AuthService, JwtModule],

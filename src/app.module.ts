@@ -6,6 +6,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { RedisModule } from './redis/redis.module';
 import { PayModule } from './pay/pay.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { UserModule } from './user/user.module';
 
 @Module({
   imports: [
@@ -13,6 +15,7 @@ import { PayModule } from './pay/pay.module';
       isGlobal: true,           
       envFilePath: '.env',     
     }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST,
@@ -26,6 +29,7 @@ import { PayModule } from './pay/pay.module';
     AuthModule,
     RedisModule,
     PayModule,
+    UserModule
   ],
   controllers: [AppController],
   providers: [AppService],
