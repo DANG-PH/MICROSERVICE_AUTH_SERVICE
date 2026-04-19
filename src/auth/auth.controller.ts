@@ -19,7 +19,6 @@ export class AuthController {
   @GrpcMethod(AUTH_SERVICE_NAME, 'Login')
   async login(data: LoginRequest, metadata: Metadata): Promise<LoginResponse> {
     const platform = metadata.get('platform')[0] as string; // 'web' | 'app' | 'game'
-    console.log('Platform từ client:', platform);
 
     return await this.authService.login(data, platform);
   }
@@ -27,7 +26,6 @@ export class AuthController {
   @GrpcMethod(AUTH_SERVICE_NAME, 'LoginWithGoogle')
   async loginGoogle(data: LoginWithGoogleRequest, metadata: Metadata): Promise<LoginWithGoogleResponse> {
     const platform = metadata.get('platform')[0] as string; // 'web' | 'app' | 'game'
-    console.log('Platform từ client:', platform);
 
     return await this.authService.loginWithGoogle(data, platform);
   }
