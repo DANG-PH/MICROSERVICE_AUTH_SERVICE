@@ -50,8 +50,11 @@ export class AuthService {
       this.client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
   }
 
-  async saveUser(user: AuthEntity): Promise<AuthEntity> {
-    return await this.userRepository.save(user);
+  async saveUser(user: AuthEntity, manager?: EntityManager): Promise<AuthEntity> {
+    const repo = manager
+                  ? manager.getRepository(AuthEntity)
+                  : this.userRepository;
+    return await repo.save(user);
   }
 
   async getAllUsers(): Promise<AuthEntity[]> {
@@ -698,11 +701,18 @@ export class AuthService {
 
   // ===== ADMIN METHODS =====
   async changeRole(data: ChangeRoleRequest): Promise<ChangeRoleResponse> {
-    const user = await this.findByUsername(data.username);
-    if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
+    await this.userRepository.manager.transaction(async (manager) => {
+      const user = await manager.findOne(AuthEntity, { 
+        where: { username: data.username } 
+      });
+      if (!user) throw new RpcException({ code: status.NOT_FOUND, message: 'User not found' });
 
-    user.role = data.newRole;
-    await this.saveUser(user);
+      const oldRole = user.role;
+      user.role = data.newRole;
+      await this.saveUser(user, manager);
+      // Invalidate token khi role thay đổi theo bất kỳ chiều nào
+      if (oldRole !== data.newRole) await this.setTokenVersion(user.id, manager);
+    });
     return { success: true };
   }
 
